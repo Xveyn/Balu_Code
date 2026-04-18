@@ -52,6 +52,25 @@ def _is_ignored(rel_parts: tuple[str, ...]) -> bool:
     return any(p in _IGNORE_DIRS for p in rel_parts)
 
 
+def _format_file_block(fs: FileSymbols) -> str:
+    """Render one file as the Aider-style block."""
+    lines = [f"=== {fs.path} ({fs.lines} lines)\n"]
+    if fs.imports:
+        lines.append(f"imports: {', '.join(fs.imports)}\n")
+    if fs.classes:
+        lines.append("classes:\n")
+        for cls in fs.classes:
+            base_part = f"({', '.join(cls.bases)})" if cls.bases else ""
+            lines.append(f"  class {cls.name}{base_part}:\n")
+            for method in cls.methods:
+                lines.append(f"    {method}\n")
+    if fs.functions:
+        lines.append("functions:\n")
+        for fn in fs.functions:
+            lines.append(f"  {fn.signature}\n")
+    return "".join(lines)
+
+
 def _serialize_symbols(
     imports: list[str], classes: list[ClassSymbol], functions: list[FunctionSymbol]
 ) -> str:
@@ -156,6 +175,41 @@ class RepoMap:
         # Drop cache rows for files that disappeared.
         self._store.delete_repo_map_entries(self._project_id, seen_paths)
         return results
+
+    @staticmethod
+    def render(files: list[FileSymbols], budget_tokens: int = 6144) -> RenderedMap:
+        """Render an Aider-style block per file until the budget is exhausted.
+
+        Token budget is approximated as ``len(text) // 4`` (a coarse but
+        well-known heuristic). Files included up to the budget appear in
+        the text; the rest are listed in ``truncated_files``. Files are
+        ordered alphabetically by path.
+        """
+        sorted_files = sorted(files, key=lambda f: f.path)
+        budget_chars = budget_tokens * 4
+        chunks: list[str] = []
+        included_count = 0
+        truncated: list[str] = []
+        cursor = 0
+
+        for fs in sorted_files:
+            block = _format_file_block(fs)
+            if cursor + len(block) > budget_chars and chunks:
+                truncated.append(fs.path)
+                continue
+            chunks.append(block)
+            cursor += len(block)
+            included_count += 1
+
+        # Anything we never saw because of the early break (we don't break
+        # — we continue — so this is just `truncated` already populated).
+        text = "".join(chunks)
+        return RenderedMap(
+            text=text,
+            file_count=included_count,
+            truncated_files=truncated,
+            total_bytes=len(text),
+        )
 
 
 __all__ = [
