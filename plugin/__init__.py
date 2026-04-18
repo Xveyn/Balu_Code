@@ -1,33 +1,52 @@
 """Balu Code BaluHost plugin.
 
 Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
-/api/plugins/balu_code/ — currently only /health; project and model
-routes land in later Phase 2 tasks. Owns two singletons: a SQLite-backed
-ProjectStore and an async OllamaClient.
+/api/plugins/balu_code/ (currently /health plus project and model routes).
+Owns two singletons: a SQLite-backed ProjectStore and an async OllamaClient.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 from pathlib import Path
 
+from app.api.deps import get_current_user
 from app.plugins.base import PluginBase, PluginMetadata
-from fastapi import APIRouter
+from app.schemas.user import UserPublic
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
 from plugin.config import BaluCodePluginConfig
 from plugin.data_dir import resolve_data_dir
-from plugin.deps import clear_singletons, set_singletons
+from plugin.deps import (
+    clear_singletons,
+    get_project_store,
+    set_singletons,
+)
 from plugin.services.ollama_client import OllamaClient
-from plugin.services.project_store import ProjectStore
+from plugin.services.project_store import (
+    DuplicateProjectError,
+    Project,
+    ProjectStore,
+)
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
 
 
-def _build_router() -> APIRouter:
-    """Build the FastAPI router served under /api/plugins/balu_code.
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    root_path: str = Field(..., min_length=1)
+    config_yaml: str | None = None
 
-    Routes land in later tasks; Phase 2 keeps only /health until Task 10.
-    """
+
+class ProjectsResponse(BaseModel):
+    projects: list[Project]
+
+
+def _build_router() -> APIRouter:
+    """Build the FastAPI router served under /api/plugins/balu_code."""
     router = APIRouter()
 
     @router.get("/health", tags=["balu_code"])
@@ -37,6 +56,40 @@ def _build_router() -> APIRouter:
             "plugin": _MANIFEST["name"],
             "version": _MANIFEST["version"],
         }
+
+    @router.post(
+        "/projects",
+        response_model=Project,
+        status_code=status.HTTP_201_CREATED,
+        tags=["balu_code"],
+    )
+    async def create_project(
+        body: ProjectCreate,
+        _user: UserPublic = Depends(get_current_user),  # noqa: B008
+        store: ProjectStore = Depends(get_project_store),  # noqa: B008
+    ) -> Project:
+        if not os.path.isabs(body.root_path):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="root_path must be absolute",
+            )
+        try:
+            return await asyncio.to_thread(
+                store.create_project, body.name, body.root_path, body.config_yaml
+            )
+        except DuplicateProjectError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"project '{body.name}' already exists",
+            ) from exc
+
+    @router.get("/projects", response_model=ProjectsResponse, tags=["balu_code"])
+    async def list_projects(
+        _user: UserPublic = Depends(get_current_user),  # noqa: B008
+        store: ProjectStore = Depends(get_project_store),  # noqa: B008
+    ) -> ProjectsResponse:
+        projects = await asyncio.to_thread(store.list_projects)
+        return ProjectsResponse(projects=projects)
 
     return router
 
