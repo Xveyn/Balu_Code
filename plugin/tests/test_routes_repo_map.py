@@ -74,15 +74,15 @@ def test_repo_map_happy_path(tmp_path, store):
 
 
 def test_repo_map_honours_budget_query(tmp_path, store):
-    for i in range(6):
+    for i in range(20):
         (tmp_path / f"f{i}.py").write_text(f"def f{i}():\n    pass\n")
     pid = _make_project(store, str(tmp_path))
     c = _client_for(store)
-    r = c.get(f"/api/plugins/balu_code/projects/{pid}/repo_map?budget=8")
+    r = c.get(f"/api/plugins/balu_code/projects/{pid}/repo_map?budget=64")
     assert r.status_code == 200
     body = r.json()
-    assert body["file_count"] < 6
-    assert len(body["truncated_files"]) == 6 - body["file_count"]
+    assert body["file_count"] < 20
+    assert len(body["truncated_files"]) == 20 - body["file_count"]
 
 
 def test_repo_map_401_when_auth_fails(tmp_path, store):
@@ -109,3 +109,17 @@ def test_repo_map_401_when_auth_fails(tmp_path, store):
     app.dependency_overrides[get_current_user] = _denied
     c = TestClient(app)
     assert c.get(f"/api/plugins/balu_code/projects/{pid}/repo_map").status_code == 401
+
+
+def test_repo_map_422_when_budget_below_minimum(tmp_path, store):
+    pid = _make_project(store, str(tmp_path))
+    c = _client_for(store)
+    r = c.get(f"/api/plugins/balu_code/projects/{pid}/repo_map?budget=0")
+    assert r.status_code == 422
+
+
+def test_repo_map_422_when_budget_above_maximum(tmp_path, store):
+    pid = _make_project(store, str(tmp_path))
+    c = _client_for(store)
+    r = c.get(f"/api/plugins/balu_code/projects/{pid}/repo_map?budget=99999")
+    assert r.status_code == 422

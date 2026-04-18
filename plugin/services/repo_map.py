@@ -1,18 +1,22 @@
-"""Runtime entry point for the repo-map walker.
+"""Repo-map walker and Aider-style formatter.
 
-This module is intentionally language-agnostic. Per-language extractors
-live in sibling modules (``repo_map_python.py``, future ``repo_map_ts.py``,
-etc.) and return the dataclasses defined in ``repo_map_types.py``.
+Hosts ``RepoMap``, the language-agnostic walker. Per-language symbol
+extractors live in sibling modules (``repo_map_python.py``, future
+``repo_map_ts.py``, etc.). The shared dataclasses + exception types
+live in ``repo_map_types.py`` and are re-exported here for caller
+convenience.
 
-Phase 3a ships only the types and the public surface skeleton; the
-``RepoMap`` class with ``walk_and_cache`` and ``render`` is added in
-Tasks 6 and 7.
+``RepoMap.walk_and_cache`` enumerates the project tree, fingerprints
+files via sha1, and persists per-file symbol snapshots in the
+``repo_map_cache`` SQLite table. ``RepoMap.render`` produces a budget-
+bounded text block ready for inclusion in an LLM prompt.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from plugin.services.project_store import ProjectStore
@@ -120,57 +124,66 @@ class RepoMap:
         results: list[FileSymbols] = []
         seen_paths: set[str] = set()
 
-        for fs_path in self._root.rglob("*.py"):
-            if not fs_path.is_file():
-                continue
-            rel = fs_path.relative_to(self._root)
-            if _is_ignored(rel.parts):
-                continue
-            rel_posix = rel.as_posix()
-            seen_paths.add(rel_posix)
+        for dirpath_str, dirnames, filenames in os.walk(self._root):
+            # Prune ignored directories *before* descending into them.
+            dirnames[:] = [d for d in dirnames if d not in _IGNORE_DIRS]
+            dirpath = Path(dirpath_str)
+            for fname in filenames:
+                if not fname.endswith(".py"):
+                    continue
+                fs_path = dirpath / fname
+                if not fs_path.is_file():
+                    continue
+                rel = fs_path.relative_to(self._root)
+                # Defensive: still check on the file-name level in case the
+                # root itself sits inside an ignored-named directory.
+                if _is_ignored(rel.parts):
+                    continue
+                rel_posix = rel.as_posix()
+                seen_paths.add(rel_posix)
 
-            content_bytes = fs_path.read_bytes()
-            mtime = fs_path.stat().st_mtime
-            # Always compute sha1: sub-second writes can leave mtime unchanged on
-            # some filesystems, so mtime is not a reliable cache key. The read +
-            # hash overhead is small compared to a tree-sitter parse.
-            sha1 = hashlib.sha1(content_bytes).hexdigest()
-            cached = cached_by_path.get(rel_posix)
-            if cached is not None and cached.sha1 == sha1:
-                # Content unchanged — use cached symbols.
-                imports, classes, functions = _deserialize_symbols(cached.symbols_json)
-                if cached.mtime != mtime:
-                    # Mtime drifted but content is the same; update mtime in cache.
+                content_bytes = fs_path.read_bytes()
+                mtime = fs_path.stat().st_mtime
+                # Always compute sha1: sub-second writes can leave mtime unchanged on
+                # some filesystems, so mtime is not a reliable cache key. The read +
+                # hash overhead is small compared to a tree-sitter parse.
+                sha1 = hashlib.sha1(content_bytes).hexdigest()
+                cached = cached_by_path.get(rel_posix)
+                if cached is not None and cached.sha1 == sha1:
+                    # Content unchanged — use cached symbols.
+                    imports, classes, functions = _deserialize_symbols(cached.symbols_json)
+                    if cached.mtime != mtime:
+                        # Mtime drifted but content is the same; update mtime in cache.
+                        self._store.upsert_repo_map_entry(
+                            project_id=self._project_id,
+                            file_path=rel_posix,
+                            mtime=mtime,
+                            sha1=sha1,
+                            symbols_json=cached.symbols_json,
+                        )
+                else:
+                    # Content changed or not cached — parse.
+                    imports, classes, functions = parse_python_file(content_bytes)
                     self._store.upsert_repo_map_entry(
                         project_id=self._project_id,
                         file_path=rel_posix,
                         mtime=mtime,
                         sha1=sha1,
-                        symbols_json=cached.symbols_json,
+                        symbols_json=_serialize_symbols(imports, classes, functions),
                     )
-            else:
-                # Content changed or not cached — parse.
-                imports, classes, functions = parse_python_file(content_bytes)
-                self._store.upsert_repo_map_entry(
-                    project_id=self._project_id,
-                    file_path=rel_posix,
-                    mtime=mtime,
-                    sha1=sha1,
-                    symbols_json=_serialize_symbols(imports, classes, functions),
-                )
 
-            line_count = content_bytes.count(b"\n") + (
-                0 if content_bytes.endswith(b"\n") or not content_bytes else 1
-            )
-            results.append(
-                FileSymbols(
-                    path=rel_posix,
-                    lines=line_count,
-                    imports=imports,
-                    classes=classes,
-                    functions=functions,
+                line_count = content_bytes.count(b"\n") + (
+                    0 if content_bytes.endswith(b"\n") or not content_bytes else 1
                 )
-            )
+                results.append(
+                    FileSymbols(
+                        path=rel_posix,
+                        lines=line_count,
+                        imports=imports,
+                        classes=classes,
+                        functions=functions,
+                    )
+                )
 
         # Drop cache rows for files that disappeared.
         self._store.delete_repo_map_entries(self._project_id, seen_paths)

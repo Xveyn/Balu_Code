@@ -14,7 +14,7 @@ from pathlib import Path
 
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from plugin.deps import get_ollama_client, get_project_store
 from plugin.schemas import (
@@ -150,7 +150,7 @@ def build_router() -> APIRouter:
     )
     async def repo_map_route(
         project_id: int,
-        budget: int = 6144,
+        budget: int = Query(default=6144, ge=64, le=32768),
         _user: UserPublic = Depends(get_current_user),
         store: ProjectStore = Depends(get_project_store),
     ) -> RepoMapResponse:
