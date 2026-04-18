@@ -1,65 +1,30 @@
-"""Domain types and runtime entry point for the repo-map walker.
+"""Runtime entry point for the repo-map walker.
 
 This module is intentionally language-agnostic. Per-language extractors
 live in sibling modules (``repo_map_python.py``, future ``repo_map_ts.py``,
-etc.) and return the dataclasses defined here.
+etc.) and return the dataclasses defined in ``repo_map_types.py``.
 
 Phase 3a ships only the types and the public surface skeleton; the
 ``RepoMap`` class with ``walk_and_cache`` and ``render`` is added in
 Tasks 6 and 7.
-
-The dataclasses below are ``frozen=True`` to signal that callers should
-not mutate them; the ``list`` fields are still technically mutable and
-the dataclasses are not hashable. Treat them as immutable by convention.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 from plugin.services.project_store import ProjectStore
-
-
-class RepoMapError(Exception):
-    """Base class for repo-map errors."""
-
-
-class ProjectRootNotAccessible(RepoMapError):
-    """Raised when the project's root_path does not exist or is not a directory."""
-
-
-@dataclass(frozen=True)
-class ClassSymbol:
-    name: str
-    bases: list[str]
-    methods: list[str]  # rendered method signatures: 'def foo(self, x: int) -> str'
-
-
-@dataclass(frozen=True)
-class FunctionSymbol:
-    name: str
-    signature: str  # 'def bar(x: int = 1) -> None'
-
-
-@dataclass(frozen=True)
-class FileSymbols:
-    path: str  # POSIX-style, relative to project root
-    lines: int
-    imports: list[str]
-    classes: list[ClassSymbol]
-    functions: list[FunctionSymbol]
-
-
-@dataclass(frozen=True)
-class RenderedMap:
-    text: str
-    file_count: int
-    truncated_files: list[str]
-    total_bytes: int
-
+from plugin.services.repo_map_python import parse_python_file
+from plugin.services.repo_map_types import (
+    ClassSymbol,
+    FileSymbols,
+    FunctionSymbol,
+    ProjectRootNotAccessible,
+    RenderedMap,
+    RepoMapError,
+)
 
 _IGNORE_DIRS = frozenset(
     {
@@ -81,7 +46,6 @@ _IGNORE_DIRS = frozenset(
         ".tox",
     }
 )
-_IGNORE_SUFFIXES = frozenset({".pyc", ".pyo", ".so"})
 
 
 def _is_ignored(rel_parts: tuple[str, ...]) -> bool:
@@ -143,13 +107,14 @@ class RepoMap:
             rel = fs_path.relative_to(self._root)
             if _is_ignored(rel.parts):
                 continue
-            if rel.suffix in _IGNORE_SUFFIXES:
-                continue
             rel_posix = rel.as_posix()
             seen_paths.add(rel_posix)
 
             content_bytes = fs_path.read_bytes()
             mtime = fs_path.stat().st_mtime
+            # Always compute sha1: sub-second writes can leave mtime unchanged on
+            # some filesystems, so mtime is not a reliable cache key. The read +
+            # hash overhead is small compared to a tree-sitter parse.
             sha1 = hashlib.sha1(content_bytes).hexdigest()
             cached = cached_by_path.get(rel_posix)
             if cached is not None and cached.sha1 == sha1:
@@ -191,12 +156,6 @@ class RepoMap:
         # Drop cache rows for files that disappeared.
         self._store.delete_repo_map_entries(self._project_id, seen_paths)
         return results
-
-
-# Deferred to avoid circular import: repo_map_python imports ClassSymbol/FunctionSymbol
-# from this module at its top level.  By deferring until our own dataclasses are fully
-# defined, the partial-initialisation race is resolved.
-from plugin.services.repo_map_python import parse_python_file  # noqa: E402, I001
 
 
 __all__ = [

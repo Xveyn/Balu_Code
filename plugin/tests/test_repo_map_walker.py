@@ -158,3 +158,14 @@ def test_file_symbols_lines_count_matches_source(tmp_path, store, project_id):
     rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
     files = rm.walk_and_cache()
     assert files[0].lines == 3
+
+
+def test_walking_empty_project_clears_cache(tmp_path, store, project_id):
+    p = _write(tmp_path, "a.py", "def f(): pass\n")
+    rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
+    rm.walk_and_cache()
+    assert {r.file_path for r in store.list_repo_map_entries(project_id)} == {"a.py"}
+
+    p.unlink()
+    rm.walk_and_cache()
+    assert store.list_repo_map_entries(project_id) == []
