@@ -14,3 +14,4 @@ quote-style = "double"
 testpaths = ["shared/tests", "plugin/tests", "cli/tests", "scripts/tests"]
 pythonpath = ["."]
 addopts = "-ra -q --strict-markers --import-mode=importlib"
+asyncio_mode = "auto"
