@@ -29,6 +29,7 @@ from plugin.services.ollama_client import OllamaClient
 from plugin.services.project_store import (
     DuplicateProjectError,
     Project,
+    ProjectNotFoundError,
     ProjectStore,
 )
 
@@ -91,6 +92,38 @@ def _build_router() -> APIRouter:
     ) -> ProjectsResponse:
         projects = await asyncio.to_thread(store.list_projects)
         return ProjectsResponse(projects=projects)
+
+    @router.get("/projects/{project_id}", response_model=Project, tags=["balu_code"])
+    async def get_project(
+        project_id: int,
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+    ) -> Project:
+        try:
+            return await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
+
+    @router.delete(
+        "/projects/{project_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["balu_code"],
+    )
+    async def delete_project(
+        project_id: int,
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+    ) -> None:
+        try:
+            await asyncio.to_thread(store.delete_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
 
     return router
 

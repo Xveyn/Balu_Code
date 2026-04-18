@@ -99,3 +99,35 @@ def test_list_projects_returns_created(client):
     body = r.json()
     assert len(body["projects"]) == 2
     assert {p["name"] for p in body["projects"]} == {"a", "b"}
+
+
+def test_get_project_by_id(client):
+    created = client.post(
+        "/api/plugins/balu_code/projects",
+        json={"name": "bh", "root_path": "/abs/bh", "config_yaml": None},
+    ).json()
+    r = client.get(f"/api/plugins/balu_code/projects/{created['id']}")
+    assert r.status_code == 200
+    assert r.json() == created
+
+
+def test_get_project_404_on_missing(client):
+    r = client.get("/api/plugins/balu_code/projects/9999")
+    assert r.status_code == 404
+
+
+def test_delete_project_204(client):
+    created = client.post(
+        "/api/plugins/balu_code/projects",
+        json={"name": "gone", "root_path": "/abs/g", "config_yaml": None},
+    ).json()
+    r = client.delete(f"/api/plugins/balu_code/projects/{created['id']}")
+    assert r.status_code == 204
+    # Subsequent GET is 404.
+    r2 = client.get(f"/api/plugins/balu_code/projects/{created['id']}")
+    assert r2.status_code == 404
+
+
+def test_delete_project_404_on_missing(client):
+    r = client.delete("/api/plugins/balu_code/projects/9999")
+    assert r.status_code == 404
