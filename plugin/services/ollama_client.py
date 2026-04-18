@@ -125,6 +125,27 @@ class OllamaClient:
             )
         return result
 
+    async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
+        """Embed one or more texts via Ollama /api/embeddings.
+
+        Empty input returns ``[]`` without touching the network.
+        """
+        if not texts:
+            return []
+        vectors: list[list[float]] = []
+        for text in texts:
+            response = await self._request_with_retry(
+                "POST", "/api/embeddings", json_body={"model": model, "prompt": text}
+            )
+            try:
+                payload = response.json()
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise OllamaUnreachable(
+                    f"invalid JSON from /api/embeddings: {exc}"
+                ) from exc
+            vectors.append(list(payload["embedding"]))
+        return vectors
+
 
 __all__ = [
     "OllamaClient",
