@@ -143,7 +143,13 @@ class OllamaClient:
                 raise OllamaUnreachable(
                     f"invalid JSON from /api/embeddings: {exc}"
                 ) from exc
-            vectors.append(list(payload["embedding"]))
+            try:
+                embedding = payload["embedding"]
+            except (KeyError, TypeError) as exc:
+                raise OllamaUnreachable(
+                    f"missing 'embedding' field in /api/embeddings response: {exc}"
+                ) from exc
+            vectors.append(list(embedding))
         return vectors
 
 

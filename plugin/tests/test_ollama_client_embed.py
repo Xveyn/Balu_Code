@@ -76,3 +76,18 @@ async def test_embed_timeout_mapped():
             await client.embed("m", ["x"])
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_embed_missing_embedding_field_raises_unreachable():
+    from plugin.services.ollama_client import OllamaUnreachable
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"unrelated": "payload"})
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaUnreachable):
+            await client.embed("nomic-embed-text", ["x"])
+    finally:
+        await client.close()
