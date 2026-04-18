@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "balu-code-cli"
+version = "0.1.0"
+description = "Terminal client for the Balu Code self-hosted coding agent."
+readme = "../README.md"
+license = { file = "../LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Xveyn" }]
+dependencies = [
+  "typer>=0.12",
+  "balu-code-shared",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+balu-code = "balu_code_cli.__main__:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/balu_code_cli"]
