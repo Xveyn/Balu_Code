@@ -4,6 +4,7 @@ Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
 /api/plugins/balu_code/ (currently /health plus project and model routes).
 Owns two singletons: a SQLite-backed ProjectStore and an async OllamaClient.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -65,8 +66,8 @@ def _build_router() -> APIRouter:
     )
     async def create_project(
         body: ProjectCreate,
-        _user: UserPublic = Depends(get_current_user),  # noqa: B008
-        store: ProjectStore = Depends(get_project_store),  # noqa: B008
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
     ) -> Project:
         if not os.path.isabs(body.root_path):
             raise HTTPException(
@@ -85,8 +86,8 @@ def _build_router() -> APIRouter:
 
     @router.get("/projects", response_model=ProjectsResponse, tags=["balu_code"])
     async def list_projects(
-        _user: UserPublic = Depends(get_current_user),  # noqa: B008
-        store: ProjectStore = Depends(get_project_store),  # noqa: B008
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
     ) -> ProjectsResponse:
         projects = await asyncio.to_thread(store.list_projects)
         return ProjectsResponse(projects=projects)
