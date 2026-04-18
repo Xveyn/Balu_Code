@@ -22,10 +22,11 @@ from plugin.config import BaluCodePluginConfig
 from plugin.data_dir import resolve_data_dir
 from plugin.deps import (
     clear_singletons,
+    get_ollama_client,
     get_project_store,
     set_singletons,
 )
-from plugin.services.ollama_client import OllamaClient
+from plugin.services.ollama_client import OllamaClient, OllamaUnreachable
 from plugin.services.project_store import (
     DuplicateProjectError,
     Project,
@@ -124,6 +125,24 @@ def _build_router() -> APIRouter:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"project {project_id} not found",
             ) from exc
+
+    @router.get(
+        "/models",
+        response_model=dict,
+        tags=["balu_code"],
+    )
+    async def list_models_route(
+        _user: UserPublic = Depends(get_current_user),
+        ollama: OllamaClient = Depends(get_ollama_client),
+    ) -> dict:
+        try:
+            models = await ollama.list_models()
+        except OllamaUnreachable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"ollama unreachable: {exc}",
+            ) from exc
+        return {"models": [m.model_dump() for m in models]}
 
     return router
 

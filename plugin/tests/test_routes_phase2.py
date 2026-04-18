@@ -131,3 +131,64 @@ def test_delete_project_204(client):
 def test_delete_project_404_on_missing(client):
     r = client.delete("/api/plugins/balu_code/projects/9999")
     assert r.status_code == 404
+
+
+def test_models_happy_path(client, store, monkeypatch):
+    # Rebuild a client whose fake Ollama returns models.
+    from plugin.services.ollama_client import OllamaModel
+
+    class _OllamaWithModels:
+        async def list_models(self):
+            return [
+                OllamaModel(
+                    name="qwen2.5-coder:14b",
+                    size=9_000_000_000,
+                    digest="abc",
+                    quantization="Q4_K_M",
+                    modified_at="2026-04-01T00:00:00Z",
+                ),
+                OllamaModel(
+                    name="nomic-embed-text",
+                    size=300_000_000,
+                    digest="def",
+                    quantization=None,
+                    modified_at=None,
+                ),
+            ]
+
+        async def close(self):
+            pass
+
+    app = FastAPI()
+    plugin = BaluCodePlugin()
+    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_ollama_client] = _OllamaWithModels
+    c = TestClient(app)
+    r = c.get("/api/plugins/balu_code/models")
+    assert r.status_code == 200
+    body = r.json()
+    names = [m["name"] for m in body["models"]]
+    assert names == ["qwen2.5-coder:14b", "nomic-embed-text"]
+    assert body["models"][0]["quantization"] == "Q4_K_M"
+    assert body["models"][1]["quantization"] is None
+
+
+def test_models_503_when_ollama_unreachable(client, store):
+    from plugin.services.ollama_client import OllamaUnreachable
+
+    class _OllamaDown:
+        async def list_models(self):
+            raise OllamaUnreachable("connection refused")
+
+        async def close(self):
+            pass
+
+    app = FastAPI()
+    plugin = BaluCodePlugin()
+    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_ollama_client] = _OllamaDown
+    c = TestClient(app)
+    r = c.get("/api/plugins/balu_code/models")
+    assert r.status_code == 503
