@@ -1,8 +1,9 @@
 """Balu Code BaluHost plugin.
 
 Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
-/api/plugins/balu_code/ (currently /health plus project and model routes).
-Owns two singletons: a SQLite-backed ProjectStore and an async OllamaClient.
+/api/plugins/balu_code/ — currently only /health; project and model
+routes land in later Phase 2 tasks. Owns two singletons: a SQLite-backed
+ProjectStore and an async OllamaClient.
 """
 from __future__ import annotations
 
@@ -74,11 +75,21 @@ class BaluCodePlugin(PluginBase):
 
     async def on_startup(self) -> None:
         data_dir = resolve_data_dir()
-        self._store = ProjectStore(data_dir / "store.db")
-        self._ollama = OllamaClient(base_url=self._config.ollama_base_url)
-        set_singletons(self._store, self._ollama)
+        store = ProjectStore(data_dir / "store.db")
+        try:
+            ollama = OllamaClient(base_url=self._config.ollama_base_url)
+        except BaseException:
+            store.close()
+            raise
+        self._store = store
+        self._ollama = ollama
+        set_singletons(store, ollama)
 
     async def on_shutdown(self) -> None:
+        if self._store is None and self._ollama is None:
+            # on_startup was never called (or a previous shutdown already ran);
+            # don't touch the module globals — they may belong to another instance.
+            return
         if self._ollama is not None:
             await self._ollama.close()
         if self._store is not None:

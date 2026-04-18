@@ -6,17 +6,9 @@ import pytest
 from plugin import BaluCodePlugin
 from plugin.config import BaluCodePluginConfig
 from plugin.deps import (
-    clear_singletons,
     get_ollama_client,
     get_project_store,
 )
-
-
-@pytest.fixture(autouse=True)
-def _reset_singletons():
-    clear_singletons()
-    yield
-    clear_singletons()
 
 
 def test_get_config_schema_returns_pydantic_model():
