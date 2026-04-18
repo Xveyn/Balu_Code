@@ -111,11 +111,13 @@ def test_class_without_bases():
     assert classes[0].bases == []
 
 
-def test_syntax_error_returns_three_empty_lists():
+def test_syntax_error_does_not_raise():
+    """Tree-sitter is error-tolerant; we accept partial results so long as
+    the function itself never raises. (For ``b"def broken(\\n"`` the parser
+    actually returns three empty lists today, but we don't pin that — the
+    contract is the no-exception guarantee.)"""
     src = b"def broken(\n"  # unterminated
     imports, classes, functions = parse_python_file(src)
-    # Tree-sitter is error-tolerant; we may still extract partial results.
-    # The contract is "no exception". Accept anything that does not raise.
     assert isinstance(imports, list)
     assert isinstance(classes, list)
     assert isinstance(functions, list)

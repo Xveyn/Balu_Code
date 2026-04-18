@@ -7,6 +7,10 @@ etc.) and return the dataclasses defined here.
 Phase 3a ships only the types and the public surface skeleton; the
 ``RepoMap`` class with ``walk_and_cache`` and ``render`` is added in
 Tasks 6 and 7.
+
+The dataclasses below are ``frozen=True`` to signal that callers should
+not mutate them; the ``list`` fields are still technically mutable and
+the dataclasses are not hashable. Treat them as immutable by convention.
 """
 
 from __future__ import annotations

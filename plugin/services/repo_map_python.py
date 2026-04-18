@@ -10,18 +10,23 @@ The tree-sitter ``Parser`` is built once per process (lazy) and reused.
 
 from __future__ import annotations
 
+import threading
+
 import tree_sitter_python as tsp
 from tree_sitter import Language, Parser
 
 from plugin.services.repo_map import ClassSymbol, FunctionSymbol
 
 _parser: Parser | None = None
+_parser_lock = threading.Lock()
 
 
 def _get_parser() -> Parser:
     global _parser
     if _parser is None:
-        _parser = Parser(Language(tsp.language()))
+        with _parser_lock:
+            if _parser is None:
+                _parser = Parser(Language(tsp.language()))
     return _parser
 
 
