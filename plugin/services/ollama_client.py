@@ -11,6 +11,7 @@ Error hierarchy:
 Transport injection: callers MAY pass a custom ``httpx.AsyncBaseTransport``
 for tests (``httpx.MockTransport``). Production omits the argument.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -140,9 +141,7 @@ class OllamaClient:
             try:
                 payload = response.json()
             except (json.JSONDecodeError, ValueError) as exc:
-                raise OllamaUnreachable(
-                    f"invalid JSON from /api/embeddings: {exc}"
-                ) from exc
+                raise OllamaUnreachable(f"invalid JSON from /api/embeddings: {exc}") from exc
             try:
                 embedding = payload["embedding"]
             except (KeyError, TypeError) as exc:
@@ -181,9 +180,7 @@ class OllamaClient:
                     body_bytes = await response.aread()
                     raise OllamaRateLimited(body_bytes.decode("utf-8", errors="replace"))
                 if response.status_code >= 500:
-                    raise OllamaUnreachable(
-                        f"HTTP {response.status_code} from /api/chat"
-                    )
+                    raise OllamaUnreachable(f"HTTP {response.status_code} from /api/chat")
                 async for line in response.aiter_lines():
                     stripped = line.strip()
                     if not stripped:
@@ -191,9 +188,7 @@ class OllamaClient:
                     try:
                         yield json.loads(stripped)
                     except (json.JSONDecodeError, ValueError) as exc:
-                        raise OllamaUnreachable(
-                            f"invalid JSON line from /api/chat: {exc}"
-                        ) from exc
+                        raise OllamaUnreachable(f"invalid JSON line from /api/chat: {exc}") from exc
         except httpx.TimeoutException as exc:
             raise OllamaTimeoutError(str(exc)) from exc
         except (httpx.ConnectError, httpx.ReadError) as exc:

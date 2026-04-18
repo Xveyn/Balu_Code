@@ -7,6 +7,7 @@ Order of precedence:
 The directory is always created (``mkdir(parents=True, exist_ok=True)``)
 so callers can assume it exists.
 """
+
 from __future__ import annotations
 
 import os

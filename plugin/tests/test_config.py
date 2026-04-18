@@ -1,4 +1,5 @@
 """Tests for BaluCodePluginConfig."""
+
 from __future__ import annotations
 
 from plugin.config import BaluCodePluginConfig
@@ -27,6 +28,4 @@ def test_rejects_unknown_fields():
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        BaluCodePluginConfig.model_validate(
-            {"ollama_base_url": "http://x", "unknown": 1}
-        )
+        BaluCodePluginConfig.model_validate({"ollama_base_url": "http://x", "unknown": 1})

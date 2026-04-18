@@ -8,6 +8,7 @@ Owns two tables:
 Uses synchronous ``sqlite3`` with an internal lock. Async callers
 should invoke methods via ``asyncio.to_thread``.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -78,9 +79,7 @@ class ProjectStore:
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
 
-    def create_project(
-        self, name: str, root_path: str, config_yaml: str | None
-    ) -> Project:
+    def create_project(self, name: str, root_path: str, config_yaml: str | None) -> Project:
         now = _now_iso()
         with self._lock:
             try:

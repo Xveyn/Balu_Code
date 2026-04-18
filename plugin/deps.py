@@ -5,6 +5,7 @@ and registers them here via ``set_singletons``. Route handlers depend on
 the ``get_*`` accessors so tests can override them with
 ``app.dependency_overrides``.
 """
+
 from __future__ import annotations
 
 from plugin.services.ollama_client import OllamaClient

@@ -1,4 +1,5 @@
 """Tests for OllamaClient.chat_stream()."""
+
 from __future__ import annotations
 
 import httpx
@@ -106,9 +107,7 @@ async def test_chat_stream_429_raises_rate_limited():
     client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(OllamaRateLimited) as excinfo:
-            async for _ in client.chat_stream(
-                "m", messages=[{"role": "user", "content": "x"}]
-            ):
+            async for _ in client.chat_stream("m", messages=[{"role": "user", "content": "x"}]):
                 pass
         # Ensure the message is str, not bytes.
         assert isinstance(excinfo.value.args[0], str)
@@ -126,9 +125,7 @@ async def test_chat_stream_5xx_raises_unreachable():
     client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(OllamaUnreachable):
-            async for _ in client.chat_stream(
-                "m", messages=[{"role": "user", "content": "x"}]
-            ):
+            async for _ in client.chat_stream("m", messages=[{"role": "user", "content": "x"}]):
                 pass
     finally:
         await client.close()
@@ -144,9 +141,7 @@ async def test_chat_stream_timeout_raises_timeout_error():
     client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(OllamaTimeoutError):
-            async for _ in client.chat_stream(
-                "m", messages=[{"role": "user", "content": "x"}]
-            ):
+            async for _ in client.chat_stream("m", messages=[{"role": "user", "content": "x"}]):
                 pass
     finally:
         await client.close()
@@ -162,9 +157,7 @@ async def test_chat_stream_connect_error_raises_unreachable():
     client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(OllamaUnreachable):
-            async for _ in client.chat_stream(
-                "m", messages=[{"role": "user", "content": "x"}]
-            ):
+            async for _ in client.chat_stream("m", messages=[{"role": "user", "content": "x"}]):
                 pass
     finally:
         await client.close()

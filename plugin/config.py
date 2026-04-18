@@ -6,6 +6,7 @@ report the default chat/embed model when BaluHost serves no per-install
 override. Later phases extend this model with RAG/context/iteration
 settings.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict

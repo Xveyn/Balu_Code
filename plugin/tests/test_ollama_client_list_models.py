@@ -1,4 +1,5 @@
 """Tests for OllamaClient.list_models()."""
+
 from __future__ import annotations
 
 import httpx
@@ -42,9 +43,7 @@ async def test_list_models_parses_tags_response():
             },
         ]
     }
-    client = OllamaClient(
-        base_url="http://fake:11434", transport=_mock_transport(200, tags_body)
-    )
+    client = OllamaClient(base_url="http://fake:11434", transport=_mock_transport(200, tags_body))
     try:
         models = await client.list_models()
     finally:
@@ -96,9 +95,7 @@ async def test_list_models_raises_unreachable_after_retries():
 
 @pytest.mark.asyncio
 async def test_list_models_invalid_json_raises_unreachable():
-    client = OllamaClient(
-        base_url="http://fake", transport=_mock_transport(200, b"not-json")
-    )
+    client = OllamaClient(base_url="http://fake", transport=_mock_transport(200, b"not-json"))
     try:
         with pytest.raises(OllamaUnreachable):
             await client.list_models()

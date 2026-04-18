@@ -1,4 +1,5 @@
 """Tests for BaluCodePlugin lifecycle + config hooks."""
+
 from __future__ import annotations
 
 import pytest
