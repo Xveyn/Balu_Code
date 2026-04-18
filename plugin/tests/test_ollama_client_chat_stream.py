@@ -94,3 +94,77 @@ async def test_chat_stream_skips_blank_lines():
     finally:
         await client.close()
     assert len(collected) == 2
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_429_raises_rate_limited():
+    from plugin.services.ollama_client import OllamaRateLimited
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text="rate limited")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaRateLimited) as excinfo:
+            async for _ in client.chat_stream(
+                "m", messages=[{"role": "user", "content": "x"}]
+            ):
+                pass
+        # Ensure the message is str, not bytes.
+        assert isinstance(excinfo.value.args[0], str)
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_5xx_raises_unreachable():
+    from plugin.services.ollama_client import OllamaUnreachable
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="service down")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaUnreachable):
+            async for _ in client.chat_stream(
+                "m", messages=[{"role": "user", "content": "x"}]
+            ):
+                pass
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_timeout_raises_timeout_error():
+    from plugin.services.ollama_client import OllamaTimeoutError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.TimeoutException("slow")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaTimeoutError):
+            async for _ in client.chat_stream(
+                "m", messages=[{"role": "user", "content": "x"}]
+            ):
+                pass
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_connect_error_raises_unreachable():
+    from plugin.services.ollama_client import OllamaUnreachable
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaUnreachable):
+            async for _ in client.chat_stream(
+                "m", messages=[{"role": "user", "content": "x"}]
+            ):
+                pass
+    finally:
+        await client.close()

@@ -1,7 +1,6 @@
 """Async HTTP client for a local Ollama instance.
 
-Phase 2 surface: ``list_models``. ``embed`` and ``chat_stream`` arrive
-in Tasks 7 and 8.
+Phase 2 surface: ``list_models``, ``embed``, ``chat_stream``.
 
 Error hierarchy:
     OllamaError
@@ -16,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -158,7 +158,7 @@ class OllamaClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         options: dict | None = None,
-    ):
+    ) -> AsyncIterator[dict]:
         """Stream parsed NDJSON frames from /api/chat.
 
         Yields each frame as a dict (the raw Ollama envelope). Downstream
@@ -178,7 +178,8 @@ class OllamaClient:
         try:
             async with self._client.stream("POST", "/api/chat", json=body) as response:
                 if response.status_code == 429:
-                    raise OllamaRateLimited(await response.aread())
+                    body_bytes = await response.aread()
+                    raise OllamaRateLimited(body_bytes.decode("utf-8", errors="replace"))
                 if response.status_code >= 500:
                     raise OllamaUnreachable(
                         f"HTTP {response.status_code} from /api/chat"
