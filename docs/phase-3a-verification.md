@@ -2,7 +2,7 @@
 
 ## Environment (local dev)
 
-- Commit: `60ea4e4`
+- Commit: `d222f42` (verification doc `8c57127` + ruff format fix `d222f42`)
 - Python: 3.13.5 (CI matrix covers 3.11 & 3.12)
 
 ## Automated checks
@@ -17,7 +17,8 @@
       `services/project_store.py`, `balu_code_shared/events.py`)
       — **22 files total** in the archive
 - [x] `python -m scripts.build_wheel` still produces the CLI wheel
-- [ ] GitHub Actions: CI green on `main` (fill in after push)
+- [x] GitHub Actions: CI green on `main` — both py 3.11 and py 3.12
+      https://github.com/Xveyn/Balu_Code/actions/runs/24614489972
 
 ## dist/ artefacts
 
@@ -61,6 +62,11 @@ Commits in `a7bad2c..60ea4e4` that were not the primary task `feat:`:
 - `60ea4e4` — `fix(plugin): use HTTP_422_UNPROCESSABLE_CONTENT (silence Starlette deprecation)`
   — Starlette 0.46 deprecated the old constant; swapped to the new one to keep
   test output clean.
+- `d222f42` — `style: apply ruff 0.15.11 format fixes` — two uncommitted
+  working-tree edits (`project_store.py` signature unwrap,
+  `test_schemas.py` blank line after module docstring) were discovered when
+  CI checked the committed versions and rejected them; committed as a
+  follow-up to the verification doc.
 
 ## Known issues carried into Phase 3b
 
