@@ -1,0 +1,21 @@
+[project]
+name = "balu-code-plugin-dev"
+version = "0.0.0"
+description = "Dev-only metadata so pytest can import plugin/ and its tests."
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "pydantic>=2.6",
+  "fastapi>=0.110",
+  "balu-code-shared",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.4",
+]
+
+[tool.setuptools]
+py-modules = []
