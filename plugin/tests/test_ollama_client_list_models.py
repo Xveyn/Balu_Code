@@ -131,3 +131,16 @@ async def test_list_models_timeout_raises_timeout_error():
             await client.list_models()
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_list_models_malformed_entry_raises_unreachable():
+    """A 200 response whose entries are missing required fields maps to Unreachable."""
+    # Missing 'size' — should raise OllamaUnreachable with a clear message.
+    body = {"models": [{"name": "m", "digest": "d"}]}
+    client = OllamaClient(base_url="http://fake", transport=_mock_transport(200, body))
+    try:
+        with pytest.raises(OllamaUnreachable):
+            await client.list_models()
+    finally:
+        await client.close()

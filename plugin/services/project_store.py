@@ -126,7 +126,8 @@ class ProjectStore:
         with self._lock:
             cur = self._conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             self._conn.commit()
-        if cur.rowcount == 0:
+            deleted = cur.rowcount
+        if deleted == 0:
             raise ProjectNotFoundError(project_id)
 
     def close(self) -> None:

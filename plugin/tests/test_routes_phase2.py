@@ -202,13 +202,21 @@ def test_routes_return_401_when_auth_fails(store):
     async def _denied():
         raise HTTPException(status_code=_status.HTTP_401_UNAUTHORIZED, detail="no")
 
+    class _FakeOllama:
+        async def list_models(self):
+            return []
+
+        async def close(self):
+            pass
+
     app = FastAPI()
     plugin = BaluCodePlugin()
     app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
     app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_ollama_client] = lambda: _FakeOllama()
     app.dependency_overrides[get_current_user] = _denied
     c = TestClient(app)
-    # A route that uses the auth dependency must return 401.
+    # Every authenticated route must return 401 when auth fails.
     assert c.get("/api/plugins/balu_code/projects").status_code == 401
     assert (
         c.post(
@@ -217,3 +225,6 @@ def test_routes_return_401_when_auth_fails(store):
         ).status_code
         == 401
     )
+    assert c.get("/api/plugins/balu_code/projects/1").status_code == 401
+    assert c.delete("/api/plugins/balu_code/projects/1").status_code == 401
+    assert c.get("/api/plugins/balu_code/models").status_code == 401

@@ -115,15 +115,18 @@ class OllamaClient:
             raise OllamaUnreachable(f"invalid JSON from /api/tags: {exc}") from exc
         result = []
         for entry in payload.get("models", []):
-            result.append(
-                OllamaModel(
-                    name=entry["name"],
-                    size=entry["size"],
-                    digest=entry["digest"],
-                    quantization=(entry.get("details") or {}).get("quantization_level"),
-                    modified_at=entry.get("modified_at"),
+            try:
+                result.append(
+                    OllamaModel(
+                        name=entry["name"],
+                        size=entry["size"],
+                        digest=entry["digest"],
+                        quantization=(entry.get("details") or {}).get("quantization_level"),
+                        modified_at=entry.get("modified_at"),
+                    )
                 )
-            )
+            except (KeyError, TypeError) as exc:
+                raise OllamaUnreachable(f"malformed entry in /api/tags response: {exc}") from exc
         return result
 
     async def embed(self, model: str, texts: list[str]) -> list[list[float]]:

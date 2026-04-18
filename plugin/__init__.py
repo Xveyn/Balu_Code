@@ -26,7 +26,13 @@ from plugin.deps import (
     get_project_store,
     set_singletons,
 )
-from plugin.services.ollama_client import OllamaClient, OllamaUnreachable
+from plugin.services.ollama_client import (
+    OllamaClient,
+    OllamaModel,
+    OllamaRateLimited,
+    OllamaTimeoutError,
+    OllamaUnreachable,
+)
 from plugin.services.project_store import (
     DuplicateProjectError,
     Project,
@@ -46,6 +52,10 @@ class ProjectCreate(BaseModel):
 
 class ProjectsResponse(BaseModel):
     projects: list[Project]
+
+
+class ModelsResponse(BaseModel):
+    models: list[OllamaModel]
 
 
 def _build_router() -> APIRouter:
@@ -128,13 +138,13 @@ def _build_router() -> APIRouter:
 
     @router.get(
         "/models",
-        response_model=dict,
+        response_model=ModelsResponse,
         tags=["balu_code"],
     )
     async def list_models_route(
         _user: UserPublic = Depends(get_current_user),
         ollama: OllamaClient = Depends(get_ollama_client),
-    ) -> dict:
+    ) -> ModelsResponse:
         try:
             models = await ollama.list_models()
         except OllamaUnreachable as exc:
@@ -142,7 +152,17 @@ def _build_router() -> APIRouter:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"ollama unreachable: {exc}",
             ) from exc
-        return {"models": [m.model_dump() for m in models]}
+        except OllamaTimeoutError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"ollama timeout: {exc}",
+            ) from exc
+        except OllamaRateLimited as exc:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"ollama rate-limited: {exc}",
+            ) from exc
+        return ModelsResponse(models=models)
 
     return router
 
