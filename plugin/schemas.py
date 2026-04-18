@@ -27,8 +27,16 @@ class ModelsResponse(BaseModel):
     models: list[OllamaModel]
 
 
+class RepoMapResponse(BaseModel):
+    text: str
+    file_count: int = Field(..., ge=0)
+    truncated_files: list[str] = Field(default_factory=list)
+    total_bytes: int = Field(..., ge=0)
+
+
 __all__ = [
     "ModelsResponse",
     "ProjectCreate",
     "ProjectsResponse",
+    "RepoMapResponse",
 ]
