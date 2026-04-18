@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from app.api.deps import get_current_user
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -192,3 +193,24 @@ def test_models_503_when_ollama_unreachable(client, store):
     c = TestClient(app)
     r = c.get("/api/plugins/balu_code/models")
     assert r.status_code == 503
+
+
+def test_routes_return_401_when_auth_fails(store):
+    from fastapi import HTTPException
+    from fastapi import status as _status
+
+    async def _denied():
+        raise HTTPException(status_code=_status.HTTP_401_UNAUTHORIZED, detail="no")
+
+    app = FastAPI()
+    plugin = BaluCodePlugin()
+    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_current_user] = _denied
+    c = TestClient(app)
+    # A route that uses the auth dependency must return 401.
+    assert c.get("/api/plugins/balu_code/projects").status_code == 401
+    assert c.post(
+        "/api/plugins/balu_code/projects",
+        json={"name": "x", "root_path": "/a", "config_yaml": None},
+    ).status_code == 401
