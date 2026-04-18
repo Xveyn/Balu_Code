@@ -152,6 +152,52 @@ class OllamaClient:
             vectors.append(list(embedding))
         return vectors
 
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        options: dict | None = None,
+    ):
+        """Stream parsed NDJSON frames from /api/chat.
+
+        Yields each frame as a dict (the raw Ollama envelope). Downstream
+        callers decide which keys matter; Phase 2 does not interpret
+        ``message.content`` or tool calls.
+
+        Does not apply the retry/backoff logic used by ``_request_with_retry``:
+        a stream that dies mid-way leaves the agent loop to decide whether
+        to resume, so wrapping it in transparent retries would hide state.
+        """
+        body: dict = {"model": model, "messages": messages, "stream": True}
+        if tools is not None:
+            body["tools"] = tools
+        if options is not None:
+            body["options"] = options
+
+        try:
+            async with self._client.stream("POST", "/api/chat", json=body) as response:
+                if response.status_code == 429:
+                    raise OllamaRateLimited(await response.aread())
+                if response.status_code >= 500:
+                    raise OllamaUnreachable(
+                        f"HTTP {response.status_code} from /api/chat"
+                    )
+                async for line in response.aiter_lines():
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        yield json.loads(stripped)
+                    except (json.JSONDecodeError, ValueError) as exc:
+                        raise OllamaUnreachable(
+                            f"invalid JSON line from /api/chat: {exc}"
+                        ) from exc
+        except httpx.TimeoutException as exc:
+            raise OllamaTimeoutError(str(exc)) from exc
+        except (httpx.ConnectError, httpx.ReadError) as exc:
+            raise OllamaUnreachable(str(exc)) from exc
+
 
 __all__ = [
     "OllamaClient",
