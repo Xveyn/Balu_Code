@@ -16,7 +16,6 @@ from app.api.deps import get_current_user
 from app.plugins.base import PluginBase, PluginMetadata
 from app.schemas.user import UserPublic
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 
 from plugin.config import BaluCodePluginConfig
 from plugin.data_dir import resolve_data_dir
@@ -26,9 +25,9 @@ from plugin.deps import (
     get_project_store,
     set_singletons,
 )
+from plugin.schemas import ModelsResponse, ProjectCreate, ProjectsResponse
 from plugin.services.ollama_client import (
     OllamaClient,
-    OllamaModel,
     OllamaRateLimited,
     OllamaTimeoutError,
     OllamaUnreachable,
@@ -42,20 +41,6 @@ from plugin.services.project_store import (
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
-
-
-class ProjectCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    root_path: str = Field(..., min_length=1)
-    config_yaml: str | None = None
-
-
-class ProjectsResponse(BaseModel):
-    projects: list[Project]
-
-
-class ModelsResponse(BaseModel):
-    models: list[OllamaModel]
 
 
 def _build_router() -> APIRouter:
