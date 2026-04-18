@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["plugin/tests/fixtures/baluhost_stub"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["shared/tests", "plugin/tests", "cli/tests"]
+addopts = "-ra -q --strict-markers"
