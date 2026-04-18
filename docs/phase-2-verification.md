@@ -15,7 +15,8 @@
       `config.py`, `data_dir.py`, `deps.py`, `services/ollama_client.py`,
       `services/project_store.py`, plus the vendored `balu_code_shared/` tree
 - [x] `python -m scripts.build_wheel` still produces the CLI wheel
-- [ ] GitHub Actions: CI green on `main` (fill in run URL after push)
+- [x] GitHub Actions: CI green on `main` — https://github.com/Xveyn/Balu_Code/actions/runs/24608185317
+      (both matrix jobs: `pytest + ruff (py 3.11)` ✓ and `pytest + ruff (py 3.12)` ✓)
 
 ## dist/ artefacts
 
