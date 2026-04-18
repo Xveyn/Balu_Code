@@ -172,7 +172,7 @@ def build_router() -> APIRouter:
             files = await asyncio.to_thread(repo_map.walk_and_cache)
         except ProjectRootNotAccessible as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"project root not accessible: {exc}",
             ) from exc
 
