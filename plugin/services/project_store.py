@@ -69,12 +69,12 @@ class ProjectStore:
         self._db_path = db_path
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys = ON")
         self._lock = threading.Lock()
         self._init_schema()
 
     def _init_schema(self) -> None:
         with self._lock:
+            self._conn.execute("PRAGMA foreign_keys = ON")
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
 
@@ -90,11 +90,11 @@ class ProjectStore:
                     (name, root_path, config_yaml, now, now),
                 )
                 self._conn.commit()
+                project_id = cur.lastrowid
             except sqlite3.IntegrityError as exc:
-                if "UNIQUE constraint failed" in str(exc):
+                if exc.sqlite_errorname == "SQLITE_CONSTRAINT_UNIQUE":
                     raise DuplicateProjectError(name) from exc
                 raise
-        project_id = cur.lastrowid
         return Project(
             id=project_id,
             name=name,
