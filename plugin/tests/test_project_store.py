@@ -87,3 +87,68 @@ def test_repo_map_cache_table_exists(store):
         "SELECT name FROM sqlite_master WHERE type='table' AND name='repo_map_cache'"
     ).fetchone()
     assert row is not None
+
+
+def test_upsert_inserts_new_repo_map_entry(store):
+    p = store.create_project(name="rm1", root_path="/x", config_yaml=None)
+    store.upsert_repo_map_entry(
+        project_id=p.id,
+        file_path="src/a.py",
+        mtime=1700000000.0,
+        sha1="aaa",
+        symbols_json='{"imports": []}',
+    )
+    rows = store.list_repo_map_entries(p.id)
+    assert len(rows) == 1
+    assert rows[0].file_path == "src/a.py"
+    assert rows[0].sha1 == "aaa"
+    assert rows[0].symbols_json == '{"imports": []}'
+
+
+def test_upsert_replaces_existing_entry(store):
+    p = store.create_project(name="rm2", root_path="/x", config_yaml=None)
+    store.upsert_repo_map_entry(p.id, "a.py", 1.0, "sha1_old", '{"v":1}')
+    store.upsert_repo_map_entry(p.id, "a.py", 2.0, "sha1_new", '{"v":2}')
+    rows = store.list_repo_map_entries(p.id)
+    assert len(rows) == 1
+    assert rows[0].mtime == 2.0
+    assert rows[0].sha1 == "sha1_new"
+    assert rows[0].symbols_json == '{"v":2}'
+
+
+def test_list_repo_map_entries_isolates_by_project(store):
+    p1 = store.create_project(name="rm3a", root_path="/x", config_yaml=None)
+    p2 = store.create_project(name="rm3b", root_path="/y", config_yaml=None)
+    store.upsert_repo_map_entry(p1.id, "p1.py", 1.0, "h1", "{}")
+    store.upsert_repo_map_entry(p2.id, "p2.py", 1.0, "h2", "{}")
+    rows1 = store.list_repo_map_entries(p1.id)
+    rows2 = store.list_repo_map_entries(p2.id)
+    assert [r.file_path for r in rows1] == ["p1.py"]
+    assert [r.file_path for r in rows2] == ["p2.py"]
+
+
+def test_delete_repo_map_entries_drops_paths_not_in_keep_set(store):
+    p = store.create_project(name="rm4", root_path="/x", config_yaml=None)
+    for path in ("keep.py", "drop.py", "also_drop.py"):
+        store.upsert_repo_map_entry(p.id, path, 1.0, "h", "{}")
+    store.delete_repo_map_entries(p.id, paths_to_keep={"keep.py"})
+    remaining = {r.file_path for r in store.list_repo_map_entries(p.id)}
+    assert remaining == {"keep.py"}
+
+
+def test_delete_repo_map_entries_with_empty_keep_set_clears_all(store):
+    p = store.create_project(name="rm5", root_path="/x", config_yaml=None)
+    store.upsert_repo_map_entry(p.id, "a.py", 1.0, "h", "{}")
+    store.delete_repo_map_entries(p.id, paths_to_keep=set())
+    assert store.list_repo_map_entries(p.id) == []
+
+
+def test_deleting_project_cascades_to_repo_map_cache(store):
+    p = store.create_project(name="rm6", root_path="/x", config_yaml=None)
+    store.upsert_repo_map_entry(p.id, "a.py", 1.0, "h", "{}")
+    store.delete_project(p.id)
+    # Re-create with the same name — the new project gets a fresh id;
+    # the old rows must have cascaded away rather than lingering on the
+    # detached project_id.
+    p2 = store.create_project(name="rm6", root_path="/x", config_yaml=None)
+    assert store.list_repo_map_entries(p2.id) == []

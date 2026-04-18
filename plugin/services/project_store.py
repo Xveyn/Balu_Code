@@ -40,6 +40,14 @@ class Project(BaseModel):
     updated_at: str
 
 
+class RepoMapCacheRow(BaseModel):
+    project_id: int
+    file_path: str
+    mtime: float
+    sha1: str
+    symbols_json: str
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +138,57 @@ class ProjectStore:
         if deleted == 0:
             raise ProjectNotFoundError(project_id)
 
+    def upsert_repo_map_entry(
+        self,
+        project_id: int,
+        file_path: str,
+        mtime: float,
+        sha1: str,
+        symbols_json: str,
+    ) -> None:
+        """Insert or replace a row in repo_map_cache."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO repo_map_cache "
+                "(project_id, file_path, mtime, sha1, symbols_json) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(project_id, file_path) DO UPDATE SET "
+                "mtime = excluded.mtime, "
+                "sha1 = excluded.sha1, "
+                "symbols_json = excluded.symbols_json",
+                (project_id, file_path, mtime, sha1, symbols_json),
+            )
+            self._conn.commit()
+
+    def list_repo_map_entries(self, project_id: int) -> list[RepoMapCacheRow]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT project_id, file_path, mtime, sha1, symbols_json "
+                "FROM repo_map_cache WHERE project_id = ? ORDER BY file_path ASC",
+                (project_id,),
+            ).fetchall()
+        return [RepoMapCacheRow(**dict(r)) for r in rows]
+
+    def delete_repo_map_entries(
+        self, project_id: int, paths_to_keep: set[str]
+    ) -> None:
+        """Delete every cached row for ``project_id`` whose file_path is not in ``paths_to_keep``."""
+        with self._lock:
+            if not paths_to_keep:
+                self._conn.execute(
+                    "DELETE FROM repo_map_cache WHERE project_id = ?",
+                    (project_id,),
+                )
+            else:
+                placeholders = ",".join("?" * len(paths_to_keep))
+                params = (project_id, *sorted(paths_to_keep))
+                self._conn.execute(
+                    f"DELETE FROM repo_map_cache WHERE project_id = ? "
+                    f"AND file_path NOT IN ({placeholders})",
+                    params,
+                )
+            self._conn.commit()
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()
@@ -141,4 +200,5 @@ __all__ = [
     "ProjectNotFoundError",
     "ProjectStore",
     "ProjectStoreError",
+    "RepoMapCacheRow",
 ]
