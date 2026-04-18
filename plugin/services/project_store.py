@@ -169,9 +169,7 @@ class ProjectStore:
             ).fetchall()
         return [RepoMapCacheRow(**dict(r)) for r in rows]
 
-    def delete_repo_map_entries(
-        self, project_id: int, paths_to_keep: set[str]
-    ) -> None:
+    def delete_repo_map_entries(self, project_id: int, paths_to_keep: set[str]) -> None:
         """Delete every cached row for ``project_id`` whose file_path is not in ``paths_to_keep``."""
         with self._lock:
             if not paths_to_keep:

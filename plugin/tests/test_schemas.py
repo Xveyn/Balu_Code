@@ -1,4 +1,5 @@
 """Tests for plugin.schemas Pydantic models."""
+
 from __future__ import annotations
 
 from plugin.schemas import RepoMapResponse
