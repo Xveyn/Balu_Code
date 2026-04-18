@@ -12,4 +12,5 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["shared/tests", "plugin/tests", "cli/tests"]
+pythonpath = ["."]
 addopts = "-ra -q --strict-markers"
