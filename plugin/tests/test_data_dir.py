@@ -1,8 +1,6 @@
 """Tests for resolve_data_dir()."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from plugin.data_dir import resolve_data_dir
 
 
