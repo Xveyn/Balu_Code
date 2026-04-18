@@ -17,7 +17,12 @@ from app.schemas.user import UserPublic
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from plugin.deps import get_ollama_client, get_project_store
-from plugin.schemas import ModelsResponse, ProjectCreate, ProjectsResponse
+from plugin.schemas import (
+    ModelsResponse,
+    ProjectCreate,
+    ProjectsResponse,
+    RepoMapResponse,
+)
 from plugin.services.ollama_client import (
     OllamaClient,
     OllamaRateLimited,
@@ -30,6 +35,7 @@ from plugin.services.project_store import (
     ProjectNotFoundError,
     ProjectStore,
 )
+from plugin.services.repo_map import ProjectRootNotAccessible, RepoMap
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -136,6 +142,47 @@ def build_router() -> APIRouter:
                 detail=f"ollama rate-limited: {exc}",
             ) from exc
         return ModelsResponse(models=models)
+
+    @router.get(
+        "/projects/{project_id}/repo_map",
+        response_model=RepoMapResponse,
+        tags=["balu_code"],
+    )
+    async def repo_map_route(
+        project_id: int,
+        budget: int = 6144,
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+    ) -> RepoMapResponse:
+        try:
+            project = await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
+
+        repo_map = RepoMap(
+            project_root=Path(project.root_path),
+            store=store,
+            project_id=project.id,
+        )
+
+        try:
+            files = await asyncio.to_thread(repo_map.walk_and_cache)
+        except ProjectRootNotAccessible as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"project root not accessible: {exc}",
+            ) from exc
+
+        rendered = RepoMap.render(files, budget_tokens=budget)
+        return RepoMapResponse(
+            text=rendered.text,
+            file_count=rendered.file_count,
+            truncated_files=list(rendered.truncated_files),
+            total_bytes=rendered.total_bytes,
+        )
 
     return router
 
