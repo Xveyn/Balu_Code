@@ -1,4 +1,5 @@
 """Tests for the wheel build script."""
+
 from __future__ import annotations
 
 import zipfile

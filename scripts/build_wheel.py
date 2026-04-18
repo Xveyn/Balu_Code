@@ -6,6 +6,7 @@ shared source into `cli/src/balu_code_cli/_vendored/balu_code_shared/`
 right before the build and remove it right after, so source control
 never contains the vendored tree.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,9 +20,7 @@ def _copy_vendored(shared_dir: Path, cli_src: Path) -> Path:
     src = shared_dir / "src" / "balu_code_shared"
     dest = cli_src / "balu_code_cli" / "_vendored"
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "__init__.py").write_text(
-        '"""Auto-vendored at build time; do not commit."""\n'
-    )
+    (dest / "__init__.py").write_text('"""Auto-vendored at build time; do not commit."""\n')
     target = dest / "balu_code_shared"
     if target.exists():
         shutil.rmtree(target)
@@ -41,9 +40,7 @@ def _patch_pyproject_dependency(cli_pyproject: Path) -> str:
     """
     original = cli_pyproject.read_text()
     patched = "\n".join(
-        line
-        for line in original.splitlines()
-        if line.strip() != '"balu-code-shared",'
+        line for line in original.splitlines() if line.strip() != '"balu-code-shared",'
     )
     cli_pyproject.write_text(patched + "\n")
     return original

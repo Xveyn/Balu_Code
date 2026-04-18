@@ -3,6 +3,7 @@
 Phase 1 only registers the top-level ``--version`` callback. Real
 subcommands (auth, init, chat, …) land in later phases.
 """
+
 from __future__ import annotations
 
 import typer

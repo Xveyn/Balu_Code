@@ -1,4 +1,5 @@
 """Tests for the /health route."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI

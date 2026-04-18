@@ -7,6 +7,7 @@ Importable:
     from scripts.build_bhplugin import build_bhplugin
     artefact = build_bhplugin(Path("."), Path("dist"))
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,9 +28,7 @@ def _should_include(relpath: Path) -> bool:
         return False
     if any(p == "__pycache__" for p in parts):
         return False
-    if relpath.suffix in _EXCLUDE_SUFFIXES:
-        return False
-    return True
+    return relpath.suffix not in _EXCLUDE_SUFFIXES
 
 
 def _iter_plugin_files(plugin_dir: Path):

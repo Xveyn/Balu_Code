@@ -1,10 +1,10 @@
 """Tests for `balu-code --version`."""
-from __future__ import annotations
 
-from typer.testing import CliRunner
+from __future__ import annotations
 
 from balu_code_cli import __version__
 from balu_code_cli.__main__ import app
+from typer.testing import CliRunner
 
 
 def test_version_flag_prints_version_and_exits_zero():

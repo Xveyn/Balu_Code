@@ -4,14 +4,14 @@ Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
 /api/plugins/balu_code/ — currently only /health; real routes come in
 later phases.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
-
 from app.plugins.base import PluginBase, PluginMetadata
+from fastapi import APIRouter
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())

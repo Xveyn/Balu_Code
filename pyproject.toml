@@ -11,6 +11,6 @@ ignore = ["E501"]  # line length handled by formatter
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["shared/tests", "plugin/tests", "cli/tests"]
+testpaths = ["shared/tests", "plugin/tests", "cli/tests", "scripts/tests"]
 pythonpath = ["."]
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers --import-mode=importlib"

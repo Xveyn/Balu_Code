@@ -1,10 +1,11 @@
 """Tests for BaluCodePlugin metadata."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from plugin import BaluCodePlugin  # noqa: F401 — package root is `plugin/`
+from plugin import BaluCodePlugin
 
 
 def test_plugin_name_is_balu_code():

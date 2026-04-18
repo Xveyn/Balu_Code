@@ -5,6 +5,7 @@ BaluHost stub to sys.path so ``from app.plugins.base import ...`` inside
 ``plugin/__init__.py`` resolves during collection, without BaluHost
 needing to be installed.
 """
+
 from __future__ import annotations
 
 import sys

@@ -3,6 +3,7 @@
 Inserts the BaluHost stub onto sys.path so that ``from app.plugins.base ...``
 resolves to a local fixture rather than requiring BaluHost to be installed.
 """
+
 from __future__ import annotations
 
 import sys
