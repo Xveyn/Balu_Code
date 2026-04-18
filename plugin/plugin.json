@@ -23,7 +23,9 @@
   "plugin_dependencies": [],
   "python_requirements": [
     "httpx>=0.27",
-    "pydantic>=2.6"
+    "pydantic>=2.6",
+    "tree-sitter>=0.22",
+    "tree-sitter-python>=0.21"
   ],
   "entrypoint": "__init__.py",
   "ui": { "bundle": "ui/bundle.js", "styles": null }
