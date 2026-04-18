@@ -210,7 +210,10 @@ def test_routes_return_401_when_auth_fails(store):
     c = TestClient(app)
     # A route that uses the auth dependency must return 401.
     assert c.get("/api/plugins/balu_code/projects").status_code == 401
-    assert c.post(
-        "/api/plugins/balu_code/projects",
-        json={"name": "x", "root_path": "/a", "config_yaml": None},
-    ).status_code == 401
+    assert (
+        c.post(
+            "/api/plugins/balu_code/projects",
+            json={"name": "x", "root_path": "/a", "config_yaml": None},
+        ).status_code
+        == 401
+    )
