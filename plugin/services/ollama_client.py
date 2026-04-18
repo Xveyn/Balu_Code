@@ -73,16 +73,22 @@ class OllamaClient:
         *,
         json_body: dict | None = None,
     ) -> httpx.Response:
-        """Issue a non-streaming request with one retry on transient errors.
+        """Issue a non-streaming request with up to two retries on transient errors.
+
+        Three total attempts: the initial call plus two retries spaced by the
+        ``_RETRY_DELAYS`` backoffs (0.5s, 1.5s).
 
         Retries: ConnectError, ReadError, HTTP 503.
-        Immediate: 429 → OllamaRateLimited; TimeoutException → OllamaTimeoutError.
-        After the final failed attempt: OllamaUnreachable.
+        Immediate: 429 -> OllamaRateLimited; TimeoutException -> OllamaTimeoutError;
+                   non-503 HTTP >= 500 -> OllamaUnreachable.
+        After all attempts fail: OllamaUnreachable.
         """
+        attempts_made = 0
         last_exc: Exception | None = None
-        for _attempt, delay_before in enumerate((0.0, *_RETRY_DELAYS)):
+        for delay_before in (0.0, *_RETRY_DELAYS):
             if delay_before:
                 await asyncio.sleep(delay_before)
+            attempts_made += 1
             try:
                 response = await self._client.request(method, path, json=json_body)
             except httpx.TimeoutException as exc:
@@ -98,7 +104,7 @@ class OllamaClient:
             if response.status_code >= 500:
                 raise OllamaUnreachable(f"HTTP {response.status_code}: {response.text}")
             return response
-        raise OllamaUnreachable(f"after {_attempt + 1} attempts: {last_exc}")
+        raise OllamaUnreachable(f"after {attempts_made} attempts: {last_exc}")
 
     async def list_models(self) -> list[OllamaModel]:
         response = await self._request_with_retry("GET", "/api/tags")

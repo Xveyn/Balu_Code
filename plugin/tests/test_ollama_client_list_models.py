@@ -79,15 +79,19 @@ async def test_list_models_retries_once_on_connect_error():
 
 @pytest.mark.asyncio
 async def test_list_models_raises_unreachable_after_retries():
-    client = OllamaClient(
-        base_url="http://fake",
-        transport=_mock_transport(0, httpx.ConnectError("down")),
-    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        raise httpx.ConnectError("down")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
     try:
         with pytest.raises(OllamaUnreachable):
             await client.list_models()
     finally:
         await client.close()
+    assert call_count["n"] == 3
 
 
 @pytest.mark.asyncio
@@ -97,6 +101,36 @@ async def test_list_models_invalid_json_raises_unreachable():
     )
     try:
         with pytest.raises(OllamaUnreachable):
+            await client.list_models()
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_list_models_429_raises_rate_limited():
+    from plugin.services.ollama_client import OllamaRateLimited
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text="rate limit exceeded")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaRateLimited):
+            await client.list_models()
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_list_models_timeout_raises_timeout_error():
+    from plugin.services.ollama_client import OllamaTimeoutError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.TimeoutException("slow")
+
+    client = OllamaClient(base_url="http://fake", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(OllamaTimeoutError):
             await client.list_models()
     finally:
         await client.close()
