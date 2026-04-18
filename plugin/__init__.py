@@ -9,14 +9,31 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi import APIRouter
+
 from app.plugins.base import PluginBase, PluginMetadata
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
 
 
+def _build_router() -> APIRouter:
+    """Build the FastAPI router served under /api/plugins/balu_code."""
+    router = APIRouter()
+
+    @router.get("/health", tags=["balu_code"])
+    async def health() -> dict[str, str]:
+        return {
+            "status": "ok",
+            "plugin": _MANIFEST["name"],
+            "version": _MANIFEST["version"],
+        }
+
+    return router
+
+
 class BaluCodePlugin(PluginBase):
-    """Main plugin class. Metadata is read from plugin.json at import time."""
+    """Main plugin class. Metadata read from plugin.json at import time."""
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -32,6 +49,9 @@ class BaluCodePlugin(PluginBase):
             min_baluhost_version=_MANIFEST.get("min_baluhost_version"),
             dependencies=list(_MANIFEST.get("plugin_dependencies", [])),
         )
+
+    def get_router(self) -> APIRouter:
+        return _build_router()
 
 
 __all__ = ["BaluCodePlugin"]
