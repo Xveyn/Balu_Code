@@ -1,0 +1,224 @@
+"""Tests for run_turn (agent loop)."""
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+from balu_code_shared.events import (
+    Error,
+    Event,
+    ToolCall,
+    ToolResult,
+    TurnEnd,
+)
+
+from plugin.config import BaluCodePluginConfig
+from plugin.services.agent_loop import TurnDeps, run_turn
+from plugin.services.project_store import Project, ProjectStore
+from plugin.services.repo_map import RepoMap
+from plugin.services.tools import default_registry
+
+
+class _FakeOllama:
+    def __init__(self, scripted: list[list[dict]]) -> None:
+        self._scripted = list(scripted)
+
+    async def chat_stream(self, model, messages, tools=None, options=None):
+        frames = self._scripted.pop(0)
+        for f in frames:
+            yield f
+
+    async def close(self) -> None:
+        pass
+
+    async def list_models(self):
+        return []
+
+    async def embed(self, model, texts):
+        return [[0.0] * 768 for _ in texts]
+
+
+class _FakeRag:
+    async def search(self, query, top_k=8, *, keyword_boost=0.15):
+        return []
+
+
+@pytest.fixture
+def tmp_project(tmp_path):
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "a.py").write_text("def foo(): pass\n")
+    return root
+
+
+@pytest.fixture
+def deps_factory(tmp_project, tmp_path):
+    def make(scripted_frames: list[list[dict]]) -> TurnDeps:
+        store = ProjectStore(tmp_path / "store.db")
+        p = store.create_project(
+            name="proj", root_path=str(tmp_project), config_yaml=None
+        )
+        project = Project(
+            id=p.id, name=p.name, root_path=p.root_path, config_yaml=p.config_yaml,
+            created_at=p.created_at, updated_at=p.updated_at,
+        )
+        repo_map = RepoMap(tmp_project, store, p.id)
+        return TurnDeps(
+            ollama=_FakeOllama(scripted_frames),
+            tool_registry=default_registry(),
+            project=project,
+            repo_map=repo_map,
+            rag=_FakeRag(),
+            config=BaluCodePluginConfig(),
+            system_prompt="sys",
+            tool_use_prompt="tool",
+        )
+    return make
+
+
+async def test_simple_turn_done_without_tool_calls(deps_factory):
+    events: list[Event] = []
+
+    async def emit(e):
+        events.append(e)
+
+    deps = deps_factory(
+        [[
+            {"message": {"content": "Hello", "tool_calls": None}, "done": False},
+            {"message": {"content": " world", "tool_calls": None}, "done": True},
+        ]]
+    )
+    history: list[dict] = []
+    await run_turn("hi", history, deps, emit)
+
+    types = [e.type for e in events]
+    assert types[0] == "turn_start"
+    assert "token" in types
+    assert types[-1] == "turn_end"
+    end = next(e for e in events if isinstance(e, TurnEnd))
+    assert end.stop_reason == "done"
+
+
+async def test_tool_call_dispatches_read_file(deps_factory):
+    events: list[Event] = []
+
+    async def emit(e):
+        events.append(e)
+
+    deps = deps_factory(
+        [
+            [
+                {
+                    "message": {
+                        "content": "reading",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": {"path": "a.py"},
+                                }
+                            }
+                        ],
+                    },
+                    "done": True,
+                }
+            ],
+            [
+                {"message": {"content": "done", "tool_calls": None}, "done": True},
+            ],
+        ]
+    )
+    history: list[dict] = []
+    await run_turn("what is in a.py?", history, deps, emit)
+
+    tool_calls = [e for e in events if isinstance(e, ToolCall)]
+    tool_results = [e for e in events if isinstance(e, ToolResult)]
+    assert len(tool_calls) == 1
+    assert tool_calls[0].tool == "read_file"
+    assert tool_calls[0].auto_approved is True
+    assert len(tool_results) == 1
+    assert tool_results[0].status == "ok"
+    assert tool_results[0].tool_call_id == tool_calls[0].tool_call_id
+
+
+async def test_iteration_cap_yields_max_iter_stop_reason(deps_factory):
+    frames_per_iter = [
+        {
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {"function": {"name": "glob", "arguments": {"pattern": "*.py"}}}
+                ],
+            },
+            "done": True,
+        }
+    ]
+    deps = deps_factory([frames_per_iter for _ in range(13)])
+    deps.config.max_iterations = 2
+    events: list[Event] = []
+
+    async def emit(e):
+        events.append(e)
+
+    history: list[dict] = []
+    await run_turn("loop forever", history, deps, emit)
+    end = next(e for e in events if isinstance(e, TurnEnd))
+    assert end.stop_reason == "max_iter"
+
+
+async def test_ollama_error_surfaces_as_error_event(deps_factory):
+    from plugin.services.ollama_client import OllamaUnreachable
+
+    events: list[Event] = []
+
+    async def emit(e):
+        events.append(e)
+
+    deps_fresh = deps_factory([[]])
+
+    class _BrokenOllama:
+        async def chat_stream(self, *a, **kw):
+            raise OllamaUnreachable("down")
+            yield
+
+        async def close(self): pass
+
+    deps = replace(deps_fresh, ollama=_BrokenOllama())
+    history: list[dict] = []
+    await run_turn("hi", history, deps, emit)
+    errors = [e for e in events if isinstance(e, Error)]
+    assert len(errors) == 1
+    assert errors[0].code == "ollama_unreachable"
+    end = next(e for e in events if isinstance(e, TurnEnd))
+    assert end.stop_reason == "error"
+
+
+async def test_unknown_tool_name_emits_error_tool_result(deps_factory):
+    events: list[Event] = []
+
+    async def emit(e):
+        events.append(e)
+
+    deps = deps_factory(
+        [
+            [
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {"function": {"name": "no_such_tool", "arguments": {}}}
+                        ],
+                    },
+                    "done": True,
+                }
+            ],
+            [
+                {"message": {"content": "ok", "tool_calls": None}, "done": True},
+            ],
+        ]
+    )
+    history: list[dict] = []
+    await run_turn("use a tool", history, deps, emit)
+    tool_results = [e for e in events if isinstance(e, ToolResult)]
+    assert len(tool_results) == 1
+    assert tool_results[0].status == "error"
