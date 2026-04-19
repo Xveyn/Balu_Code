@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from plugin.services.index_jobs import JobStatus
 from plugin.services.ollama_client import OllamaModel
 from plugin.services.project_store import Project
 
@@ -34,7 +35,27 @@ class RepoMapResponse(BaseModel):
     total_bytes: int = Field(..., ge=0)
 
 
+class IndexJobResponse(BaseModel):
+    job_id: str
+    project_id: int
+    status: JobStatus
+
+
+class IndexStatusResponse(BaseModel):
+    job_id: str
+    project_id: int
+    status: JobStatus
+    files_total: int
+    files_processed: int
+    chunks_total: int
+    error: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 __all__ = [
+    "IndexJobResponse",
+    "IndexStatusResponse",
     "ModelsResponse",
     "ProjectCreate",
     "ProjectsResponse",
