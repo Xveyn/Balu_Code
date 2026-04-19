@@ -6,6 +6,7 @@ as an ``asyncio.Task`` wrapped in a shim that catches exceptions and
 finalises the status. One job per project at a time — concurrent starts
 raise ``AlreadyIndexingError``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -92,10 +93,7 @@ class IndexJobTracker:
         return self._jobs.get(job_id)
 
     def is_running_for_project(self, project_id: int) -> bool:
-        return any(
-            j.project_id == project_id and j.status in _LIVE
-            for j in self._jobs.values()
-        )
+        return any(j.project_id == project_id and j.status in _LIVE for j in self._jobs.values())
 
 
 __all__ = [

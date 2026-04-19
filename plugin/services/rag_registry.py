@@ -6,6 +6,7 @@ shutdown the registry closes every opened index.
 Concurrency: ``get`` is guarded by an ``asyncio.Lock`` so two
 simultaneous requests for the same project cannot double-open the DB.
 """
+
 from __future__ import annotations
 
 import asyncio

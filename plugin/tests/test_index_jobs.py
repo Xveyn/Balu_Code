@@ -1,4 +1,5 @@
 """Tests for IndexJobTracker."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +19,9 @@ def tracker() -> IndexJobTracker:
     return IndexJobTracker()
 
 
-async def _wait_for_status(tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 2.0):
+async def _wait_for_status(
+    tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 2.0
+):
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         j = tracker.get_job(job_id)
