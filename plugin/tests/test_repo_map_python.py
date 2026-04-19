@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from plugin.services.repo_map import ClassSymbol, FunctionSymbol
 from plugin.services.repo_map_python import parse_python_file
+from plugin.services.repo_map_types import ClassSymbol, FunctionSymbol
 
 
 def test_empty_file_returns_three_empty_lists():

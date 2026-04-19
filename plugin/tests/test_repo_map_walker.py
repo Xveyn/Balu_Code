@@ -7,11 +7,8 @@ from pathlib import Path
 import pytest
 
 from plugin.services.project_store import ProjectStore
-from plugin.services.repo_map import (
-    FileSymbols,
-    ProjectRootNotAccessible,
-    RepoMap,
-)
+from plugin.services.repo_map import ProjectRootNotAccessible, RepoMap
+from plugin.services.repo_map_types import FileSymbols
 
 
 @pytest.fixture
@@ -158,6 +155,26 @@ def test_file_symbols_lines_count_matches_source(tmp_path, store, project_id):
     rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
     files = rm.walk_and_cache()
     assert files[0].lines == 3
+
+
+def test_mtime_drift_updates_cached_mtime(tmp_path, store, project_id):
+    """When mtime drifts but content is unchanged, the new mtime must be persisted."""
+    import os
+
+    p = _write(tmp_path, "a.py", "def f(): pass\n")
+    rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
+    rm.walk_and_cache()
+
+    original_row = store.list_repo_map_entries(project_id)[0]
+    original_mtime = original_row.mtime
+
+    new_mtime = original_mtime + 100
+    os.utime(p, (new_mtime, new_mtime))
+
+    rm.walk_and_cache()
+    updated_row = store.list_repo_map_entries(project_id)[0]
+    assert updated_row.mtime == new_mtime
+    assert updated_row.sha1 == original_row.sha1  # content unchanged
 
 
 def test_walking_empty_project_clears_cache(tmp_path, store, project_id):

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from plugin.services.repo_map import (
+from plugin.services.repo_map import RepoMap
+from plugin.services.repo_map_types import (
     ClassSymbol,
     FileSymbols,
     FunctionSymbol,
     RenderedMap,
-    RepoMap,
 )
 
 
@@ -107,3 +107,12 @@ def test_total_bytes_matches_text_length():
     f = _file("a.py", lines=5, imports=["os"])
     out = RepoMap.render([f], budget_tokens=1024)
     assert out.total_bytes == len(out.text)
+
+
+def test_first_file_always_included_even_when_budget_too_small():
+    """A tiny budget must still yield at least one file block."""
+    f = _file("a.py", lines=5, imports=["os"])
+    out = RepoMap.render([f], budget_tokens=1)  # 4-char budget, header alone is >4 chars
+    assert out.file_count == 1
+    assert out.truncated_files == []
+    assert "=== a.py" in out.text

@@ -142,8 +142,8 @@ class RepoMap:
                 rel_posix = rel.as_posix()
                 seen_paths.add(rel_posix)
 
-                content_bytes = fs_path.read_bytes()
                 mtime = fs_path.stat().st_mtime
+                content_bytes = fs_path.read_bytes()
                 # Always compute sha1: sub-second writes can leave mtime unchanged on
                 # some filesystems, so mtime is not a reliable cache key. The read +
                 # hash overhead is small compared to a tree-sitter parse.
@@ -197,6 +197,11 @@ class RepoMap:
         well-known heuristic). Files included up to the budget appear in
         the text; the rest are listed in ``truncated_files``. Files are
         ordered alphabetically by path.
+
+        The first file (in alphabetical order) is always included even
+        when its rendered block exceeds the budget on its own. Callers
+        that need an empty render for a zero-file input should pass an
+        empty list.
         """
         sorted_files = sorted(files, key=lambda f: f.path)
         budget_chars = budget_tokens * 4
@@ -214,8 +219,10 @@ class RepoMap:
             cursor += len(block)
             included_count += 1
 
-        # Anything we never saw because of the early break (we don't break
-        # — we continue — so this is just `truncated` already populated).
+        # We `continue` (not `break`) on over-budget so that smaller later
+        # files which might still fit get a chance. In practice the outer
+        # comparison is monotonic once the budget is tight, but the loop
+        # shape is cheap and keeps `truncated_files` complete.
         text = "".join(chunks)
         return RenderedMap(
             text=text,
@@ -226,11 +233,7 @@ class RepoMap:
 
 
 __all__ = [
-    "ClassSymbol",
-    "FileSymbols",
-    "FunctionSymbol",
     "ProjectRootNotAccessible",
-    "RenderedMap",
     "RepoMap",
     "RepoMapError",
 ]
