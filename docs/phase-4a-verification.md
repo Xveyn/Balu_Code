@@ -12,7 +12,7 @@
 - [x] `pytest -v` — 248 tests passing (up from 216 at end of Phase 3b, +32)
 - [x] `.bhplugin` includes all Phase-4a service modules + both prompt files (37 files total)
 - [x] `python -m scripts.build_wheel` still produces `balu_code_cli-0.1.0-py3-none-any.whl`
-- [ ] GitHub Actions: CI green on `main` (fill in after push)
+- [x] GitHub Actions: CI green on `main` — https://github.com/Xveyn/Balu_Code/actions/runs/24637491851
 
 ## Manual checks against dev BaluHost
 
