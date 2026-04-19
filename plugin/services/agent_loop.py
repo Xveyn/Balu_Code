@@ -303,6 +303,7 @@ async def run_turn(
             tool_msg = {"role": "tool", "name": name, "content": result.text}
             history.append(tool_msg)
             messages.append(tool_msg)
+            total_tokens += count_tokens(result.text)
 
     await emit(
         TurnEnd(
