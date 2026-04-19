@@ -98,3 +98,45 @@ async def test_shutdown_clears_rag_registry_and_tracker(tmp_path, monkeypatch):
         get_rag_registry()
     with pytest.raises(RuntimeError):
         get_index_job_tracker()
+
+
+@pytest.mark.asyncio
+async def test_startup_registers_tool_registry_and_config(tmp_path, monkeypatch):
+    from plugin.deps import (
+        clear_singletons,
+        get_plugin_config,
+        get_tool_registry,
+    )
+    from plugin.services.tools import ToolRegistry
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    try:
+        reg = get_tool_registry()
+        cfg = get_plugin_config()
+        assert isinstance(reg, ToolRegistry)
+        assert reg.names() == ["glob", "grep", "read_file"]
+        assert isinstance(cfg, BaluCodePluginConfig)
+    finally:
+        await p.on_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_clears_tool_registry_and_config(tmp_path, monkeypatch):
+    from plugin.deps import (
+        clear_singletons,
+        get_plugin_config,
+        get_tool_registry,
+    )
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    await p.on_shutdown()
+    with pytest.raises(RuntimeError):
+        get_tool_registry()
+    with pytest.raises(RuntimeError):
+        get_plugin_config()

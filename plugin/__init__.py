@@ -1,9 +1,9 @@
 """Balu Code BaluHost plugin.
 
-Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
-/api/plugins/balu_code/ — see ``plugin/routes.py`` for the route surface.
-Owns four singletons: a SQLite-backed ProjectStore, an async OllamaClient,
-a RagRegistry (per-project sqlite-vec indices), and an IndexJobTracker.
+Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router
+at /api/plugins/balu_code/ — see ``plugin/routes.py``. Owns six
+singletons: ProjectStore, OllamaClient, RagRegistry, IndexJobTracker,
+ToolRegistry, BaluCodePluginConfig.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.ollama_client import OllamaClient
 from plugin.services.project_store import ProjectStore
 from plugin.services.rag_registry import RagRegistry
+from plugin.services.tools import ToolRegistry, default_registry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -36,6 +37,7 @@ class BaluCodePlugin(PluginBase):
         self._ollama: OllamaClient | None = None
         self._rag_registry: RagRegistry | None = None
         self._index_job_tracker: IndexJobTracker | None = None
+        self._tool_registry: ToolRegistry | None = None
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -75,11 +77,20 @@ class BaluCodePlugin(PluginBase):
             ollama=ollama,
         )
         index_job_tracker = IndexJobTracker()
+        tool_registry = default_registry()
         self._store = store
         self._ollama = ollama
         self._rag_registry = rag_registry
         self._index_job_tracker = index_job_tracker
-        set_singletons(store, ollama, rag_registry, index_job_tracker)
+        self._tool_registry = tool_registry
+        set_singletons(
+            store,
+            ollama,
+            rag_registry,
+            index_job_tracker,
+            tool_registry,
+            self._config,
+        )
 
     async def on_shutdown(self) -> None:
         if (
@@ -87,6 +98,7 @@ class BaluCodePlugin(PluginBase):
             and self._ollama is None
             and self._rag_registry is None
             and self._index_job_tracker is None
+            and self._tool_registry is None
         ):
             return
         if self._rag_registry is not None:
@@ -100,6 +112,7 @@ class BaluCodePlugin(PluginBase):
         self._ollama = None
         self._rag_registry = None
         self._index_job_tracker = None
+        self._tool_registry = None
 
 
 __all__ = ["BaluCodePlugin"]
