@@ -14,13 +14,19 @@ from pathlib import Path
 
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
+from balu_code_shared.events import Error, UserMessage, parse_frame
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import ValidationError
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from plugin.config import BaluCodePluginConfig
 from plugin.deps import (
     get_index_job_tracker,
     get_ollama_client,
+    get_plugin_config,
     get_project_store,
     get_rag_registry,
+    get_tool_registry,
 )
 from plugin.schemas import (
     IndexJobResponse,
@@ -30,6 +36,7 @@ from plugin.schemas import (
     ProjectsResponse,
     RepoMapResponse,
 )
+from plugin.services.agent_loop import TurnDeps, run_turn
 from plugin.services.index_jobs import (
     AlreadyIndexingError,
     IndexJob,
@@ -51,6 +58,7 @@ from plugin.services.project_store import (
 from plugin.services.rag_index import RagIndexUnavailable
 from plugin.services.rag_registry import RagRegistry
 from plugin.services.repo_map import ProjectRootNotAccessible, RepoMap
+from plugin.services.tools import ToolRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -271,6 +279,70 @@ def build_router() -> APIRouter:
             started_at=job.started_at,
             finished_at=job.finished_at,
         )
+
+    @router.websocket("/chat")
+    async def chat_socket(
+        websocket: WebSocket,
+        project_id: int,
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+        ollama: OllamaClient = Depends(get_ollama_client),
+        rag_registry: RagRegistry = Depends(get_rag_registry),
+        tool_registry: ToolRegistry = Depends(get_tool_registry),
+        config: BaluCodePluginConfig = Depends(get_plugin_config),
+    ) -> None:
+        try:
+            project = await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError:
+            await websocket.close(code=1008, reason="project not found")
+            return
+
+        try:
+            rag = await rag_registry.get(project.id)
+        except Exception as exc:
+            await websocket.close(code=1011, reason=f"rag init failed: {exc}")
+            return
+
+        repo_map = RepoMap(
+            project_root=Path(project.root_path),
+            store=store,
+            project_id=project.id,
+        )
+
+        await websocket.accept()
+
+        deps = TurnDeps(
+            ollama=ollama,
+            tool_registry=tool_registry,
+            project=project,
+            repo_map=repo_map,
+            rag=rag,
+            config=config,
+        )
+        history: list[dict] = []
+
+        async def _emit(event) -> None:
+            await websocket.send_json(event.model_dump())
+
+        try:
+            while True:
+                raw = await websocket.receive_json()
+                try:
+                    frame = parse_frame(raw)
+                except ValidationError as exc:
+                    await _emit(Error(code="bad_frame", message=str(exc)[:200]))
+                    continue
+                if isinstance(frame, UserMessage):
+                    await run_turn(frame.content, history, deps, _emit)
+                else:
+                    await _emit(
+                        Error(
+                            code="unsupported_frame",
+                            message=f"frame type '{frame.type}' is not supported in 4a",
+                        )
+                    )
+        except WebSocketDisconnect:
+            return
 
     return router
 
