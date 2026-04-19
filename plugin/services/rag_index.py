@@ -13,6 +13,7 @@ thread-dispatch dance per-call.
 from __future__ import annotations
 
 import asyncio
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,6 +23,18 @@ import sqlite_vec
 
 from plugin.services.ollama_client import OllamaClient
 from plugin.services.rag_chunker import Chunk
+
+_TOKEN_RE = re.compile(r"[^\W_]+", flags=re.UNICODE)
+
+
+def _keyword_tokens(query: str) -> set[str]:
+    """Lowercased tokens of length >=3 extracted from ``query``."""
+    return {t.lower() for t in _TOKEN_RE.findall(query) if len(t) >= 3}
+
+
+def _has_token(tokens: set[str], file_path: str, text: str) -> bool:
+    hay = (file_path + "\n" + text).lower()
+    return any(t in hay for t in tokens)
 
 
 class RagIndexError(Exception):
@@ -91,7 +104,7 @@ class RagIndex:
             # inside an executescript that also has other CREATE TABLE statements.
             conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0("
-                f"embedding float[{self._vector_dim}])"
+                f"embedding float[{self._vector_dim}] distance_metric=cosine)"
             )
             conn.commit()
         except BaseException:
@@ -210,6 +223,58 @@ class RagIndex:
     def _all_paths_sync(self) -> set[str]:
         assert self._conn is not None
         return {row[0] for row in self._conn.execute("SELECT DISTINCT file_path FROM chunks")}
+
+    async def search(
+        self,
+        query: str,
+        top_k: int = 8,
+        *,
+        keyword_boost: float = 0.15,
+    ) -> list[SearchHit]:
+        """Top-K nearest chunks for ``query`` with optional keyword boost.
+
+        1. Embed ``query`` via OllamaClient.
+        2. Fetch top ``top_k * 2`` hits from sqlite-vec by cosine distance.
+        3. For each hit: ``base_score = 1 - distance``. If any query token
+           (case-insensitive, >=3 chars, split on non-alphanumerics) appears
+           in ``file_path`` or ``chunk.text`` → ``score = base_score + keyword_boost``.
+        4. Sort by score descending, return top ``top_k``.
+        """
+        if top_k <= 0:
+            return []
+        query_vecs = await self._ollama.embed(self._embed_model, [query])
+        query_vec = query_vecs[0]
+        fetch_k = top_k * 2
+        rows = await asyncio.to_thread(self._search_sync, query_vec, fetch_k)
+        if not rows:
+            return []
+        tokens = _keyword_tokens(query)
+        hits: list[SearchHit] = []
+        for file_path, start_line, end_line, text, distance in rows:
+            base_score = 1.0 - float(distance)
+            boost = keyword_boost if _has_token(tokens, file_path, text) else 0.0
+            chunk = Chunk(
+                file_path=file_path,
+                start_line=int(start_line),
+                end_line=int(end_line),
+                text=text,
+            )
+            hits.append(SearchHit(chunk=chunk, score=base_score + boost))
+        hits.sort(key=lambda h: h.score, reverse=True)
+        return hits[:top_k]
+
+    def _search_sync(self, query_vec: list[float], k: int) -> list[tuple]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            "SELECT chunks.file_path, chunks.start_line, chunks.end_line, "
+            "       chunks.text, vec_chunks.distance "
+            "FROM vec_chunks "
+            "JOIN chunks ON chunks.id = vec_chunks.rowid "
+            "WHERE vec_chunks.embedding MATCH ? AND k = ? "
+            "ORDER BY vec_chunks.distance",
+            (sqlite_vec.serialize_float32(query_vec), k),
+        ).fetchall()
+        return [tuple(r) for r in rows]
 
 
 __all__ = [

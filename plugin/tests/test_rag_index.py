@@ -143,3 +143,75 @@ async def test_unavailable_when_sqlite_vec_cannot_load(tmp_path, monkeypatch):
     idx = RagIndex(tmp_path / "rag.db", "nomic-embed-text", ollama)
     with pytest.raises(RagIndexUnavailable):
         await idx.open()
+
+
+async def test_search_returns_empty_for_empty_index(index):
+    hits = await index.search("anything", top_k=8)
+    assert hits == []
+
+
+async def test_search_orders_by_similarity(index):
+    # Two chunks: one mentions "authentication", one mentions "rendering".
+    await index.upsert_file_chunks(
+        "auth.py",
+        "sha_auth",
+        [Chunk(file_path="auth.py", start_line=1, end_line=5, text="authentication middleware")],
+    )
+    await index.upsert_file_chunks(
+        "render.py",
+        "sha_render",
+        [Chunk(file_path="render.py", start_line=1, end_line=5, text="html rendering helpers")],
+    )
+    hits = await index.search("authentication flow", top_k=2)
+    assert len(hits) == 2
+    # The auth chunk (more token overlap) must rank first.
+    assert hits[0].chunk.file_path == "auth.py"
+
+
+async def test_search_keyword_boost_shifts_ranking(index):
+    # Two chunks with identical "generic" text so their cosine similarity
+    # is identical; one has the query token in its file_path, which
+    # should win via the +0.15 keyword bonus.
+    generic_text = "shared utility helper implementation"
+    await index.upsert_file_chunks(
+        "widgets.py",
+        "sha_w",
+        [Chunk(file_path="widgets.py", start_line=1, end_line=5, text=generic_text)],
+    )
+    await index.upsert_file_chunks(
+        "authentication/helpers.py",
+        "sha_a",
+        [
+            Chunk(
+                file_path="authentication/helpers.py",
+                start_line=1,
+                end_line=5,
+                text=generic_text,
+            )
+        ],
+    )
+    hits = await index.search("authentication", top_k=2)
+    assert hits[0].chunk.file_path == "authentication/helpers.py"
+
+
+async def test_search_top_k_limits_results(index):
+    for i in range(5):
+        await index.upsert_file_chunks(
+            f"f{i}.py",
+            f"sha_{i}",
+            [Chunk(file_path=f"f{i}.py", start_line=1, end_line=1, text=f"content {i}")],
+        )
+    hits = await index.search("content", top_k=3)
+    assert len(hits) == 3
+
+
+async def test_search_score_has_keyword_bonus_applied(index):
+    await index.upsert_file_chunks(
+        "target.py",
+        "sha_t",
+        [Chunk(file_path="target.py", start_line=1, end_line=1, text="target content here")],
+    )
+    hits = await index.search("target", top_k=1)
+    assert len(hits) == 1
+    # Score = (1 - distance) + 0.15 keyword boost → must exceed 0.15 at minimum.
+    assert hits[0].score > 0.15
