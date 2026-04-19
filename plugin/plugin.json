@@ -26,8 +26,10 @@
     "pydantic>=2.6",
     "sqlite-vec>=0.1.9",
     "tiktoken>=0.6",
+    "trafilatura>=1.12",
     "tree-sitter>=0.22",
-    "tree-sitter-python>=0.21"
+    "tree-sitter-python>=0.21",
+    "unidiff>=0.7"
   ],
   "entrypoint": "__init__.py",
   "ui": { "bundle": "ui/bundle.js", "styles": null }
