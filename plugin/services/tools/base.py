@@ -11,6 +11,7 @@ A tool is any object that conforms to the ``Tool`` Protocol:
 for correlation). Phase 4b will extend it with approval callbacks and
 audit-log hooks.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,9 +42,7 @@ class Tool(Protocol):
     args_schema: type[BaseModel]
     risk: Literal["read", "write", "exec", "network"]
 
-    async def execute(
-        self, args: BaseModel, ctx: ToolContext
-    ) -> ToolResult: ...
+    async def execute(self, args: BaseModel, ctx: ToolContext) -> ToolResult: ...
 
 
 __all__ = ["Tool", "ToolContext", "ToolResult"]

@@ -1,4 +1,5 @@
 """Tests for the read_file tool."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,9 +24,7 @@ async def test_reads_utf8_file(tmp_path):
 async def test_rejects_path_escape(tmp_path):
     (tmp_path / "a.py").write_text("x\n")
     t = ReadFileTool()
-    result = await t.execute(
-        ReadFileArgs(path="../escape.txt"), _ctx(tmp_path)
-    )
+    result = await t.execute(ReadFileArgs(path="../escape.txt"), _ctx(tmp_path))
     assert result.status == "error"
     assert "escape" in (result.error or "").lower() or "root" in (result.error or "").lower()
 
@@ -61,8 +60,6 @@ async def test_returns_error_for_missing_file(tmp_path):
 async def test_truncates_at_max_bytes(tmp_path):
     (tmp_path / "big.py").write_text("x" * 10_000)
     t = ReadFileTool()
-    result = await t.execute(
-        ReadFileArgs(path="big.py", max_bytes=100), _ctx(tmp_path)
-    )
+    result = await t.execute(ReadFileArgs(path="big.py", max_bytes=100), _ctx(tmp_path))
     assert result.status == "ok"
     assert len(result.text.encode("utf-8", errors="replace")) <= 100

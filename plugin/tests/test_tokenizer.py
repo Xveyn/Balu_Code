@@ -1,4 +1,5 @@
 """Tests for tokenizer helpers."""
+
 from __future__ import annotations
 
 from plugin.services.tokenizer import count_messages_tokens, count_tokens
@@ -38,9 +39,7 @@ def test_count_messages_tokens_handles_tool_calls():
         {
             "role": "assistant",
             "content": "calling a tool",
-            "tool_calls": [
-                {"function": {"name": "read_file", "arguments": {"path": "a.py"}}}
-            ],
+            "tool_calls": [{"function": {"name": "read_file", "arguments": {"path": "a.py"}}}],
         }
     ]
     total = count_messages_tokens(messages)

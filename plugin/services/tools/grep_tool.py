@@ -4,6 +4,7 @@ Uses ripgrep (``rg``) as a subprocess when available; falls back to a
 pure-Python ``re`` scan otherwise. Output format is always
 ``path:line:content`` (one match per line). Max 500 matches.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,9 +22,7 @@ _MAX_FILE_BYTES = 2 * 1024 * 1024
 
 class GrepArgs(BaseModel):
     pattern: str = Field(..., min_length=1, description="Python-style regex.")
-    glob: str | None = Field(
-        default=None, description="Optional glob to restrict the search."
-    )
+    glob: str | None = Field(default=None, description="Optional glob to restrict the search.")
     case_insensitive: bool = False
 
 
@@ -45,9 +44,7 @@ class GrepTool:
         text = "\n".join(lines)
         return ToolResult(status="ok", text=text, bytes_out=len(text))
 
-    async def _run_rg(
-        self, rg: str, args: GrepArgs, ctx: ToolContext
-    ) -> list[str]:
+    async def _run_rg(self, rg: str, args: GrepArgs, ctx: ToolContext) -> list[str]:
         cmd = [
             rg,
             "--line-number",
@@ -85,7 +82,7 @@ class GrepTool:
     def _strip_root(self, line: str, ctx: ToolContext) -> str:
         prefix = str(ctx.project_root.resolve()) + "/"
         if line.startswith(prefix):
-            return line[len(prefix):]
+            return line[len(prefix) :]
         return line
 
     def _run_python(self, args: GrepArgs, ctx: ToolContext) -> list[str]:

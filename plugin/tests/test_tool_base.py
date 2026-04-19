@@ -1,4 +1,5 @@
 """Tests for Tool Protocol + ToolRegistry."""
+
 from __future__ import annotations
 
 from pathlib import Path

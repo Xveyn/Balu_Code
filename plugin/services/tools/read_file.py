@@ -4,6 +4,7 @@ Path containment is verified inline here rather than in a shared helper:
 Phase 4b extracts the check to ``plugin/services/paths.py`` when the
 write-side tools land and the same logic is needed twice.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

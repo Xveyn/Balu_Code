@@ -6,6 +6,7 @@ The encoder is a reasonable default for the models we target
 agent loop carries a safety margin (``max_total_tokens_per_turn``)
 that absorbs the drift.
 """
+
 from __future__ import annotations
 
 import json

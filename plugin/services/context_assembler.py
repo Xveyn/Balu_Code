@@ -10,6 +10,7 @@ session history → current user message. If the resulting total exceeds
 System prompt, tool-use prompt, and the current user message are never
 dropped.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -3,6 +3,7 @@
 ``default_registry()`` (added in Task 8) will return a ``ToolRegistry``
 pre-populated with the Phase-4a read tools.
 """
+
 from __future__ import annotations
 
 from plugin.services.tools.base import Tool, ToolContext, ToolResult

@@ -1,4 +1,5 @@
 """Tests for the grep tool."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,9 +26,7 @@ async def test_finds_literal_match(tmp_path):
 async def test_case_insensitive(tmp_path):
     (tmp_path / "a.py").write_text("DEF Foo():\n    pass\n")
     t = GrepTool()
-    result = await t.execute(
-        GrepArgs(pattern="foo", case_insensitive=True), _ctx(tmp_path)
-    )
+    result = await t.execute(GrepArgs(pattern="foo", case_insensitive=True), _ctx(tmp_path))
     assert result.status == "ok"
     assert "a.py" in result.text
 
@@ -36,9 +35,7 @@ async def test_honors_glob_filter(tmp_path):
     (tmp_path / "a.py").write_text("target\n")
     (tmp_path / "b.txt").write_text("target\n")
     t = GrepTool()
-    result = await t.execute(
-        GrepArgs(pattern="target", glob="*.py"), _ctx(tmp_path)
-    )
+    result = await t.execute(GrepArgs(pattern="target", glob="*.py"), _ctx(tmp_path))
     assert "a.py" in result.text
     assert "b.txt" not in result.text
 

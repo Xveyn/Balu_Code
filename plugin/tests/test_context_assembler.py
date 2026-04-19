@@ -1,4 +1,5 @@
 """Tests for assemble_context."""
+
 from __future__ import annotations
 
 from plugin.services.context_assembler import AssembledContext, assemble_context
@@ -25,9 +26,7 @@ async def test_message_order_is_system_tool_use_repo_rag_history_user():
         repo_map_budget=1024,
         rag_budget=1024,
     )
-    roles_and_hints = [
-        (m["role"], m["content"][:40]) for m in ctx.messages
-    ]
+    roles_and_hints = [(m["role"], m["content"][:40]) for m in ctx.messages]
     assert roles_and_hints[0] == ("system", "SYSPROMPT")
     assert roles_and_hints[1] == ("system", "TOOLUSE")
     assert "=== foo.py ===" in ctx.messages[2]["content"]

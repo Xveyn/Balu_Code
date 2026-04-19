@@ -4,6 +4,7 @@
 them here via ``set_singletons``. Route handlers access them via the
 ``get_*`` accessors; tests override via ``app.dependency_overrides``.
 """
+
 from __future__ import annotations
 
 from plugin.config import BaluCodePluginConfig

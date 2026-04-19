@@ -4,6 +4,7 @@ Honors the shared IGNORE_DIRS list from ``plugin.services.repo_map``
 so ``.venv``, ``node_modules``, ``__pycache__``, etc. are never
 reported.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

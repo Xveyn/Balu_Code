@@ -6,6 +6,7 @@ accumulates history, emits WS events via the provided callback. The
 function never raises; all failures become an ``Error`` event plus
 ``TurnEnd(stop_reason="error")``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -89,9 +90,7 @@ async def run_turn(
         return
 
     try:
-        rag_hits = await deps.rag.search(
-            user_message, top_k=deps.config.rag_top_k
-        )
+        rag_hits = await deps.rag.search(user_message, top_k=deps.config.rag_top_k)
     except Exception:
         rag_hits = []
 
@@ -238,27 +237,17 @@ async def run_turn(
             name = function.get("name") or ""
             raw_args = function.get("arguments")
             try:
-                args_dict = (
-                    raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
-                )
+                args_dict = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
             except (json.JSONDecodeError, ValueError):
                 args_dict = {}
             tc_id = _new_tool_call_id(iterations)
 
-            await emit(
-                ToolCall(
-                    tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=True
-                )
-            )
+            await emit(ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=True))
             try:
                 tool = deps.tool_registry.get(name)
             except KeyError:
                 msg = f"unknown tool '{name}'"
-                await emit(
-                    ToolResult(
-                        tool_call_id=tc_id, status="error", bytes_out=0, error=msg
-                    )
-                )
+                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
                 tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                 history.append(tool_msg)
                 messages.append(tool_msg)
@@ -268,11 +257,7 @@ async def run_turn(
                 parsed = tool.args_schema.model_validate(args_dict)
             except ValidationError as exc:
                 msg = f"invalid args: {exc}"
-                await emit(
-                    ToolResult(
-                        tool_call_id=tc_id, status="error", bytes_out=0, error=msg
-                    )
-                )
+                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
                 tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                 history.append(tool_msg)
                 messages.append(tool_msg)
@@ -282,11 +267,7 @@ async def run_turn(
                 result = await tool.execute(parsed, tool_ctx)
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {exc}"
-                await emit(
-                    ToolResult(
-                        tool_call_id=tc_id, status="error", bytes_out=0, error=msg
-                    )
-                )
+                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
                 tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                 history.append(tool_msg)
                 messages.append(tool_msg)

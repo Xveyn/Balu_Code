@@ -1,4 +1,5 @@
 """Tests for run_turn (agent loop)."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -55,12 +56,14 @@ def tmp_project(tmp_path):
 def deps_factory(tmp_project, tmp_path):
     def make(scripted_frames: list[list[dict]]) -> TurnDeps:
         store = ProjectStore(tmp_path / "store.db")
-        p = store.create_project(
-            name="proj", root_path=str(tmp_project), config_yaml=None
-        )
+        p = store.create_project(name="proj", root_path=str(tmp_project), config_yaml=None)
         project = Project(
-            id=p.id, name=p.name, root_path=p.root_path, config_yaml=p.config_yaml,
-            created_at=p.created_at, updated_at=p.updated_at,
+            id=p.id,
+            name=p.name,
+            root_path=p.root_path,
+            config_yaml=p.config_yaml,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
         )
         repo_map = RepoMap(tmp_project, store, p.id)
         return TurnDeps(
@@ -73,6 +76,7 @@ def deps_factory(tmp_project, tmp_path):
             system_prompt="sys",
             tool_use_prompt="tool",
         )
+
     return make
 
 
@@ -83,10 +87,12 @@ async def test_simple_turn_done_without_tool_calls(deps_factory):
         events.append(e)
 
     deps = deps_factory(
-        [[
-            {"message": {"content": "Hello", "tool_calls": None}, "done": False},
-            {"message": {"content": " world", "tool_calls": None}, "done": True},
-        ]]
+        [
+            [
+                {"message": {"content": "Hello", "tool_calls": None}, "done": False},
+                {"message": {"content": " world", "tool_calls": None}, "done": True},
+            ]
+        ]
     )
     history: list[dict] = []
     await run_turn("hi", history, deps, emit)
@@ -146,9 +152,7 @@ async def test_iteration_cap_yields_max_iter_stop_reason(deps_factory):
         {
             "message": {
                 "content": "",
-                "tool_calls": [
-                    {"function": {"name": "glob", "arguments": {"pattern": "*.py"}}}
-                ],
+                "tool_calls": [{"function": {"name": "glob", "arguments": {"pattern": "*.py"}}}],
             },
             "done": True,
         }
@@ -181,7 +185,8 @@ async def test_ollama_error_surfaces_as_error_event(deps_factory):
             raise OllamaUnreachable("down")
             yield
 
-        async def close(self): pass
+        async def close(self):
+            pass
 
     deps = replace(deps_fresh, ollama=_BrokenOllama())
     history: list[dict] = []
@@ -205,9 +210,7 @@ async def test_unknown_tool_name_emits_error_tool_result(deps_factory):
                 {
                     "message": {
                         "content": "",
-                        "tool_calls": [
-                            {"function": {"name": "no_such_tool", "arguments": {}}}
-                        ],
+                        "tool_calls": [{"function": {"name": "no_such_tool", "arguments": {}}}],
                     },
                     "done": True,
                 }
