@@ -1,4 +1,5 @@
 httpx>=0.27
 pydantic>=2.6
+sqlite-vec>=0.1.9
 tree-sitter>=0.22
 tree-sitter-python>=0.21
