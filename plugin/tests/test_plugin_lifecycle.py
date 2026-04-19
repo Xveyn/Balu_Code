@@ -56,3 +56,45 @@ async def test_shutdown_clears_singletons(tmp_path, monkeypatch):
         get_project_store()
     with pytest.raises(RuntimeError):
         get_ollama_client()
+
+
+@pytest.mark.asyncio
+async def test_startup_registers_rag_registry_and_tracker(tmp_path, monkeypatch):
+    from plugin.deps import (
+        clear_singletons,
+        get_index_job_tracker,
+        get_rag_registry,
+    )
+    from plugin.services.index_jobs import IndexJobTracker
+    from plugin.services.rag_registry import RagRegistry
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    try:
+        registry = get_rag_registry()
+        tracker = get_index_job_tracker()
+        assert isinstance(registry, RagRegistry)
+        assert isinstance(tracker, IndexJobTracker)
+    finally:
+        await p.on_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_clears_rag_registry_and_tracker(tmp_path, monkeypatch):
+    from plugin.deps import (
+        clear_singletons,
+        get_index_job_tracker,
+        get_rag_registry,
+    )
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    await p.on_shutdown()
+    with pytest.raises(RuntimeError):
+        get_rag_registry()
+    with pytest.raises(RuntimeError):
+        get_index_job_tracker()

@@ -2,7 +2,8 @@
 
 Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router at
 /api/plugins/balu_code/ — see ``plugin/routes.py`` for the route surface.
-Owns two singletons: a SQLite-backed ProjectStore and an async OllamaClient.
+Owns four singletons: a SQLite-backed ProjectStore, an async OllamaClient,
+a RagRegistry (per-project sqlite-vec indices), and an IndexJobTracker.
 """
 
 from __future__ import annotations
@@ -17,8 +18,10 @@ from plugin.config import BaluCodePluginConfig
 from plugin.data_dir import resolve_data_dir
 from plugin.deps import clear_singletons, set_singletons
 from plugin.routes import build_router
+from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.ollama_client import OllamaClient
 from plugin.services.project_store import ProjectStore
+from plugin.services.rag_registry import RagRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -31,6 +34,8 @@ class BaluCodePlugin(PluginBase):
         self._config = BaluCodePluginConfig()
         self._store: ProjectStore | None = None
         self._ollama: OllamaClient | None = None
+        self._rag_registry: RagRegistry | None = None
+        self._index_job_tracker: IndexJobTracker | None = None
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -64,13 +69,28 @@ class BaluCodePlugin(PluginBase):
         except BaseException:
             store.close()
             raise
+        rag_registry = RagRegistry(
+            data_dir=data_dir,
+            embed_model=self._config.embed_model,
+            ollama=ollama,
+        )
+        index_job_tracker = IndexJobTracker()
         self._store = store
         self._ollama = ollama
-        set_singletons(store, ollama)
+        self._rag_registry = rag_registry
+        self._index_job_tracker = index_job_tracker
+        set_singletons(store, ollama, rag_registry, index_job_tracker)
 
     async def on_shutdown(self) -> None:
-        if self._store is None and self._ollama is None:
+        if (
+            self._store is None
+            and self._ollama is None
+            and self._rag_registry is None
+            and self._index_job_tracker is None
+        ):
             return
+        if self._rag_registry is not None:
+            await self._rag_registry.close_all()
         if self._ollama is not None:
             await self._ollama.close()
         if self._store is not None:
@@ -78,6 +98,8 @@ class BaluCodePlugin(PluginBase):
         clear_singletons()
         self._store = None
         self._ollama = None
+        self._rag_registry = None
+        self._index_job_tracker = None
 
 
 __all__ = ["BaluCodePlugin"]
