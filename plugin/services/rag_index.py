@@ -82,9 +82,11 @@ class RagIndex:
         self._ollama = ollama
         self._vector_dim = vector_dim
         self._conn: sqlite3.Connection | None = None
+        self._lock = asyncio.Lock()
 
     async def open(self) -> None:
-        await asyncio.to_thread(self._open_sync)
+        async with self._lock:
+            await asyncio.to_thread(self._open_sync)
 
     def _open_sync(self) -> None:
         if self._conn is not None:
@@ -113,7 +115,8 @@ class RagIndex:
         self._conn = conn
 
     async def close(self) -> None:
-        await asyncio.to_thread(self._close_sync)
+        async with self._lock:
+            await asyncio.to_thread(self._close_sync)
 
     def _close_sync(self) -> None:
         if self._conn is not None:
@@ -132,7 +135,8 @@ class RagIndex:
             await self.delete_file_chunks(file_path)
             return
         embeddings = await self._ollama.embed(self._embed_model, [c.text for c in chunks])
-        await asyncio.to_thread(self._upsert_sync, file_path, file_sha1, chunks, embeddings)
+        async with self._lock:
+            await asyncio.to_thread(self._upsert_sync, file_path, file_sha1, chunks, embeddings)
 
     def _upsert_sync(
         self,
@@ -183,7 +187,8 @@ class RagIndex:
                 )
 
     async def delete_file_chunks(self, file_path: str) -> None:
-        await asyncio.to_thread(self._delete_sync, file_path)
+        async with self._lock:
+            await asyncio.to_thread(self._delete_sync, file_path)
 
     def _delete_sync(self, file_path: str) -> None:
         assert self._conn is not None
@@ -208,7 +213,8 @@ class RagIndex:
             )
 
     async def get_file_sha1(self, file_path: str) -> str | None:
-        return await asyncio.to_thread(self._get_file_sha1_sync, file_path)
+        async with self._lock:
+            return await asyncio.to_thread(self._get_file_sha1_sync, file_path)
 
     def _get_file_sha1_sync(self, file_path: str) -> str | None:
         assert self._conn is not None
@@ -218,7 +224,8 @@ class RagIndex:
         return row[0] if row is not None else None
 
     async def all_indexed_paths(self) -> set[str]:
-        return await asyncio.to_thread(self._all_paths_sync)
+        async with self._lock:
+            return await asyncio.to_thread(self._all_paths_sync)
 
     def _all_paths_sync(self) -> set[str]:
         assert self._conn is not None
@@ -245,7 +252,8 @@ class RagIndex:
         query_vecs = await self._ollama.embed(self._embed_model, [query])
         query_vec = query_vecs[0]
         fetch_k = top_k * 2
-        rows = await asyncio.to_thread(self._search_sync, query_vec, fetch_k)
+        async with self._lock:
+            rows = await asyncio.to_thread(self._search_sync, query_vec, fetch_k)
         if not rows:
             return []
         tokens = _keyword_tokens(query)

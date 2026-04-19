@@ -147,7 +147,7 @@ class RepoMap:
                 # Always compute sha1: sub-second writes can leave mtime unchanged on
                 # some filesystems, so mtime is not a reliable cache key. The read +
                 # hash overhead is small compared to a tree-sitter parse.
-                sha1 = hashlib.sha1(content_bytes).hexdigest()
+                sha1 = hashlib.sha1(content_bytes, usedforsecurity=False).hexdigest()
                 cached = cached_by_path.get(rel_posix)
                 if cached is not None and cached.sha1 == sha1:
                     # Content unchanged — use cached symbols.

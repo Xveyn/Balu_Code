@@ -34,7 +34,7 @@ async def run_index_job(
     for fs_path, rel_posix in _iter_python_files(project_root):
         seen_paths.add(rel_posix)
         content_bytes = fs_path.read_bytes()
-        sha1 = hashlib.sha1(content_bytes).hexdigest()
+        sha1 = hashlib.sha1(content_bytes, usedforsecurity=False).hexdigest()
         cached = await rag.get_file_sha1(rel_posix)
         if cached == sha1:
             continue

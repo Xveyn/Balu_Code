@@ -51,6 +51,12 @@ class _FakeRagRegistry:
             await i.close()
         self._indices.clear()
 
+    def close_sync(self) -> None:
+        """Teardown helper for sync tests that can't drive an event loop."""
+        for idx in self._indices.values():
+            idx._close_sync()  # test-only direct call
+        self._indices.clear()
+
 
 @pytest.fixture
 def store(tmp_path) -> ProjectStore:
@@ -78,7 +84,7 @@ def _client(store, rag_registry, tracker) -> TestClient:
 async def _wait_status(
     tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 3.0
 ):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while loop.time() < deadline:
         j = tracker.get_job(job_id)
@@ -91,9 +97,12 @@ async def _wait_status(
 def test_post_index_404_on_unknown_project(tmp_path, store):
     registry = _FakeRagRegistry(tmp_path)
     tracker = IndexJobTracker()
-    c = _client(store, registry, tracker)
-    r = c.post("/api/plugins/balu_code/projects/9999/index")
-    assert r.status_code == 404
+    try:
+        c = _client(store, registry, tracker)
+        r = c.post("/api/plugins/balu_code/projects/9999/index")
+        assert r.status_code == 404
+    finally:
+        registry.close_sync()
 
 
 async def test_post_index_202_and_job_transitions_to_done(tmp_path, store):
@@ -136,6 +145,8 @@ async def test_post_index_202_and_job_transitions_to_done(tmp_path, store):
         assert final["files_processed"] == 1
         assert final["chunks_total"] >= 1
 
+    await registry.close_all()
+
 
 def test_post_index_409_when_already_running(tmp_path, store):
     (tmp_path / "a.py").write_text("def foo(): pass\n")
@@ -149,9 +160,12 @@ def test_post_index_409_when_already_running(tmp_path, store):
     fake = IndexJob(id="x", project_id=pid, status=JobStatus.RUNNING)
     tracker._jobs["x"] = fake  # test-only: directly inject a live job
 
-    c = _client(store, registry, tracker)
-    r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
-    assert r.status_code == 409
+    try:
+        c = _client(store, registry, tracker)
+        r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
+        assert r.status_code == 409
+    finally:
+        registry.close_sync()
 
 
 def test_post_index_401_when_auth_fails(tmp_path, store):
@@ -173,18 +187,24 @@ def test_post_index_401_when_auth_fails(tmp_path, store):
     app.dependency_overrides[get_rag_registry] = lambda: registry
     app.dependency_overrides[get_index_job_tracker] = lambda: tracker
     app.dependency_overrides[get_current_user] = _denied
-    c = TestClient(app)
-    r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
-    assert r.status_code == 401
+    try:
+        c = TestClient(app)
+        r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
+        assert r.status_code == 401
+    finally:
+        registry.close_sync()
 
 
 def test_status_404_on_unknown_job(tmp_path, store):
     pid = _make_project(store, str(tmp_path))
     registry = _FakeRagRegistry(tmp_path / "rag")
     tracker = IndexJobTracker()
-    c = _client(store, registry, tracker)
-    r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/nonexistent")
-    assert r.status_code == 404
+    try:
+        c = _client(store, registry, tracker)
+        r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/nonexistent")
+        assert r.status_code == 404
+    finally:
+        registry.close_sync()
 
 
 def test_status_200_for_done_job(tmp_path, store):
@@ -206,13 +226,16 @@ def test_status_200_for_done_job(tmp_path, store):
     )
     tracker._jobs["j-done"] = job
 
-    c = _client(store, registry, tracker)
-    r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/j-done")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "done"
-    assert body["files_processed"] == 1
-    assert body["chunks_total"] == 5
+    try:
+        c = _client(store, registry, tracker)
+        r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/j-done")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "done"
+        assert body["files_processed"] == 1
+        assert body["chunks_total"] == 5
+    finally:
+        registry.close_sync()
 
 
 def test_status_404_when_job_belongs_to_different_project(tmp_path, store):
@@ -225,6 +248,9 @@ def test_status_404_when_job_belongs_to_different_project(tmp_path, store):
     tracker = IndexJobTracker()
     injected = IndexJob(id="j-other", project_id=9999, status=JobStatus.DONE)
     tracker._jobs["j-other"] = injected
-    c = _client(store, registry, tracker)
-    r = c.get(f"/api/plugins/balu_code/projects/{other_pid}/index/status/j-other")
-    assert r.status_code == 404
+    try:
+        c = _client(store, registry, tracker)
+        r = c.get(f"/api/plugins/balu_code/projects/{other_pid}/index/status/j-other")
+        assert r.status_code == 404
+    finally:
+        registry.close_sync()

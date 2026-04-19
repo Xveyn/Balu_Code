@@ -22,8 +22,8 @@ def tracker() -> IndexJobTracker:
 async def _wait_for_status(
     tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 2.0
 ):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
         j = tracker.get_job(job_id)
         if j is not None and j.status == target:
             return j
