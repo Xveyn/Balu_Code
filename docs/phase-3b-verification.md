@@ -1,8 +1,8 @@
-# Phase 3b verification — 2026-04-18
+# Phase 3b verification — 2026-04-19
 
 ## Environment (local dev)
 
-- Commit: `d858f0d`
+- Commit: `31b6db6` (post-format-cleanup on top of the Phase-3b feat commits)
 - Python: 3.13.5 (CI matrix covers 3.11 & 3.12)
 
 ## Automated checks
@@ -15,7 +15,7 @@
       `services/indexer.py`, plus prior Phase modules
       (27 files total in archive)
 - [x] `python -m scripts.build_wheel` still produces the CLI wheel
-- [ ] GitHub Actions: CI green on `main` (fill in after push)
+- [x] GitHub Actions: CI green on `main` — run [24629388171](https://github.com/Xveyn/Balu_Code/actions/runs/24629388171), both py 3.11 and py 3.12 green in ~35 s
 
 ## dist/ artefacts
 
@@ -51,6 +51,11 @@ Commits since `5f024ba` (Phase 3b start), excluding the planned `feat:` tasks:
   the `starlette.testclient.TestClient` blocks the event loop, which deadlocks
   the background indexer task; switched to `httpx.AsyncClient` with the
   `asgi` transport so the test can actually observe `queued → running → done`.
+- `style: ruff format auto-fixes + gitignore .claude/` — cleanup commit after
+  the initial verification doc push failed CI because the working tree had
+  uncommitted `ruff format` auto-fixes. Also gitignored the Claude-Code
+  session-state dir so future runs don't leak stray `.claude/` files into
+  the repo.
 
 All other commits are direct `feat:` deliverables from the Phase 3b task list.
 
