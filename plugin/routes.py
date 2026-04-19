@@ -16,13 +16,25 @@ from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from plugin.deps import get_ollama_client, get_project_store
+from plugin.deps import (
+    get_index_job_tracker,
+    get_ollama_client,
+    get_project_store,
+    get_rag_registry,
+)
 from plugin.schemas import (
+    IndexJobResponse,
     ModelsResponse,
     ProjectCreate,
     ProjectsResponse,
     RepoMapResponse,
 )
+from plugin.services.index_jobs import (
+    AlreadyIndexingError,
+    IndexJob,
+    IndexJobTracker,
+)
+from plugin.services.indexer import run_index_job
 from plugin.services.ollama_client import (
     OllamaClient,
     OllamaRateLimited,
@@ -35,6 +47,8 @@ from plugin.services.project_store import (
     ProjectNotFoundError,
     ProjectStore,
 )
+from plugin.services.rag_index import RagIndexUnavailable
+from plugin.services.rag_registry import RagRegistry
 from plugin.services.repo_map import ProjectRootNotAccessible, RepoMap
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
@@ -182,6 +196,52 @@ def build_router() -> APIRouter:
             file_count=rendered.file_count,
             truncated_files=list(rendered.truncated_files),
             total_bytes=rendered.total_bytes,
+        )
+
+    @router.post(
+        "/projects/{project_id}/index",
+        response_model=IndexJobResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["balu_code"],
+    )
+    async def start_index_job(
+        project_id: int,
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+        rag_registry: RagRegistry = Depends(get_rag_registry),
+        tracker: IndexJobTracker = Depends(get_index_job_tracker),
+    ) -> IndexJobResponse:
+        try:
+            project = await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
+
+        try:
+            rag = await rag_registry.get(project.id)
+        except RagIndexUnavailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"rag index unavailable: {exc}",
+            ) from exc
+
+        project_root = Path(project.root_path)
+
+        async def _worker(job: IndexJob) -> None:
+            await run_index_job(job, project_root=project_root, rag=rag)
+
+        try:
+            job = tracker.start_job(project_id=project.id, worker=_worker)
+        except AlreadyIndexingError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+
+        return IndexJobResponse(
+            job_id=job.id, project_id=job.project_id, status=job.status
         )
 
     return router
