@@ -96,34 +96,45 @@ def test_post_index_404_on_unknown_project(tmp_path, store):
     assert r.status_code == 404
 
 
-@pytest.mark.skip(reason="status route added in Task 11")
-def test_post_index_202_and_job_transitions_to_done(tmp_path, store):
+async def test_post_index_202_and_job_transitions_to_done(tmp_path, store):
+    import httpx
+    from httpx import ASGITransport
+
     (tmp_path / "a.py").write_text("def foo(): pass\n")
     pid = _make_project(store, str(tmp_path))
     registry = _FakeRagRegistry(tmp_path / "rag")
     tracker = IndexJobTracker()
-    c = _client(store, registry, tracker)
 
-    r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
-    assert r.status_code == 202
-    body = r.json()
-    assert body["project_id"] == pid
-    assert body["status"] in ("queued", "running", "done")
+    app = FastAPI()
+    plugin = BaluCodePlugin()
+    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_ollama_client] = lambda: _FakeOllama()
+    app.dependency_overrides[get_rag_registry] = lambda: registry
+    app.dependency_overrides[get_index_job_tracker] = lambda: tracker
 
-    # Poll via status endpoint until DONE.
-    job_id = body["job_id"]
-    for _ in range(300):
-        rs = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/{job_id}")
-        assert rs.status_code == 200
-        if rs.json()["status"] in ("done", "error"):
-            break
-        import time
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(f"/api/plugins/balu_code/projects/{pid}/index")
+        assert r.status_code == 202
+        body = r.json()
+        job_id = body["job_id"]
 
-        time.sleep(0.02)
-    final = rs.json()
-    assert final["status"] == "done"
-    assert final["files_processed"] == 1
-    assert final["chunks_total"] >= 1
+        # Poll via status endpoint until DONE; `await asyncio.sleep` yields
+        # control so the background IndexJobTracker task can advance.
+        final = None
+        for _ in range(300):
+            rs = await client.get(f"/api/plugins/balu_code/projects/{pid}/index/status/{job_id}")
+            assert rs.status_code == 200
+            final = rs.json()
+            if final["status"] in ("done", "error"):
+                break
+            await asyncio.sleep(0.02)
+
+        assert final is not None
+        assert final["status"] == "done"
+        assert final["files_processed"] == 1
+        assert final["chunks_total"] >= 1
 
 
 def test_post_index_409_when_already_running(tmp_path, store):
