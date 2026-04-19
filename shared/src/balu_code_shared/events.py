@@ -50,8 +50,24 @@ class Error(_FrozenBase):
     message: str
 
 
+class ToolCall(_FrozenBase):
+    type: Literal["tool_call"] = "tool_call"
+    tool_call_id: str = Field(..., min_length=1)
+    tool: str = Field(..., min_length=1)
+    args: dict[str, Any]
+    auto_approved: bool
+
+
+class ToolResult(_FrozenBase):
+    type: Literal["tool_result"] = "tool_result"
+    tool_call_id: str = Field(..., min_length=1)
+    status: Literal["ok", "error"]
+    bytes_out: int = Field(default=0, ge=0)
+    error: str | None = None
+
+
 Event = Annotated[
-    UserMessage | TurnStart | Token | TurnEnd | Error,
+    UserMessage | TurnStart | Token | TurnEnd | Error | ToolCall | ToolResult,
     Field(discriminator="type"),
 ]
 
@@ -69,6 +85,8 @@ __all__ = [
     "Event",
     "StopReason",
     "Token",
+    "ToolCall",
+    "ToolResult",
     "TurnEnd",
     "TurnStart",
     "UserMessage",

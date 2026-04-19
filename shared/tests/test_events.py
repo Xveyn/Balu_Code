@@ -99,12 +99,109 @@ class TestParseFrame:
             parse_frame({"content": "no type field"})
 
 
-def test_event_union_includes_all_five():
+class TestToolCall:
+    def test_constructs_with_all_fields(self):
+        from balu_code_shared.events import ToolCall
+
+        evt = ToolCall(
+            tool_call_id="tc_01",
+            tool="read_file",
+            args={"path": "foo.py"},
+            auto_approved=True,
+        )
+        assert evt.type == "tool_call"
+        assert evt.tool_call_id == "tc_01"
+        assert evt.tool == "read_file"
+        assert evt.args == {"path": "foo.py"}
+        assert evt.auto_approved is True
+
+    def test_rejects_empty_tool_call_id(self):
+        import pytest
+        from balu_code_shared.events import ToolCall
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ToolCall(tool_call_id="", tool="t", args={}, auto_approved=True)
+
+
+class TestToolResult:
+    def test_constructs_with_all_fields(self):
+        from balu_code_shared.events import ToolResult
+
+        evt = ToolResult(
+            tool_call_id="tc_01",
+            status="ok",
+            bytes_out=42,
+        )
+        assert evt.type == "tool_result"
+        assert evt.tool_call_id == "tc_01"
+        assert evt.status == "ok"
+        assert evt.bytes_out == 42
+        assert evt.error is None
+
+    def test_rejects_unknown_status(self):
+        import pytest
+        from balu_code_shared.events import ToolResult
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ToolResult(tool_call_id="tc_01", status="pending", bytes_out=0)
+
+    def test_error_carries_message(self):
+        from balu_code_shared.events import ToolResult
+
+        evt = ToolResult(
+            tool_call_id="tc_01",
+            status="error",
+            bytes_out=0,
+            error="path escapes project root",
+        )
+        assert evt.status == "error"
+        assert evt.error == "path escapes project root"
+
+
+class TestParseFrameExtended:
+    def test_parses_tool_call(self):
+        from balu_code_shared.events import ToolCall, parse_frame
+
+        evt = parse_frame(
+            {
+                "type": "tool_call",
+                "tool_call_id": "tc_1",
+                "tool": "glob",
+                "args": {"pattern": "**/*.py"},
+                "auto_approved": True,
+            }
+        )
+        assert isinstance(evt, ToolCall)
+
+    def test_parses_tool_result(self):
+        from balu_code_shared.events import ToolResult, parse_frame
+
+        evt = parse_frame(
+            {
+                "type": "tool_result",
+                "tool_call_id": "tc_1",
+                "status": "ok",
+                "bytes_out": 10,
+            }
+        )
+        assert isinstance(evt, ToolResult)
+
+
+def test_event_union_includes_all_seven():
     import typing
 
-    # Event is Annotated[Union[...], Field(discriminator=...)]; unwrap both layers.
     annotated_args = typing.get_args(Event)
     union_type = annotated_args[0]
     members = typing.get_args(union_type)
     names = {m.model_fields["type"].default for m in members}
-    assert names == {"user_message", "turn_start", "token", "turn_end", "error"}
+    assert names == {
+        "user_message",
+        "turn_start",
+        "token",
+        "turn_end",
+        "error",
+        "tool_call",
+        "tool_result",
+    }
