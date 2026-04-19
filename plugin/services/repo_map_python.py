@@ -21,7 +21,7 @@ _parser: Parser | None = None
 _parser_lock = threading.Lock()
 
 
-def _get_parser() -> Parser:
+def get_parser() -> Parser:
     global _parser
     if _parser is None:
         with _parser_lock:
@@ -115,7 +115,7 @@ def parse_python_file(
     Tree-sitter is error-tolerant — partial parses still yield whatever the
     parser successfully recognised. This function never raises on bad input.
     """
-    parser = _get_parser()
+    parser = get_parser()
     try:
         tree = parser.parse(source)
     except Exception:
@@ -147,4 +147,4 @@ def parse_python_file(
     return imports, classes, functions
 
 
-__all__ = ["parse_python_file"]
+__all__ = ["get_parser", "parse_python_file"]

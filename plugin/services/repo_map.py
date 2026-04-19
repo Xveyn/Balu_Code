@@ -30,7 +30,7 @@ from plugin.services.repo_map_types import (
     RepoMapError,
 )
 
-_IGNORE_DIRS = frozenset(
+IGNORE_DIRS = frozenset(
     {
         "__pycache__",
         ".venv",
@@ -53,7 +53,7 @@ _IGNORE_DIRS = frozenset(
 
 
 def _is_ignored(rel_parts: tuple[str, ...]) -> bool:
-    return any(p in _IGNORE_DIRS for p in rel_parts)
+    return any(p in IGNORE_DIRS for p in rel_parts)
 
 
 def _format_file_block(fs: FileSymbols) -> str:
@@ -126,7 +126,7 @@ class RepoMap:
 
         for dirpath_str, dirnames, filenames in os.walk(self._root):
             # Prune ignored directories *before* descending into them.
-            dirnames[:] = [d for d in dirnames if d not in _IGNORE_DIRS]
+            dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
             dirpath = Path(dirpath_str)
             for fname in filenames:
                 if not fname.endswith(".py"):
@@ -233,6 +233,7 @@ class RepoMap:
 
 
 __all__ = [
+    "IGNORE_DIRS",
     "ProjectRootNotAccessible",
     "RepoMap",
     "RepoMapError",
