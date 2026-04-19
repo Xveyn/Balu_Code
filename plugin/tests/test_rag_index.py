@@ -85,10 +85,24 @@ async def test_upsert_replaces_existing_chunks_for_same_path(index):
     assert paths == {"a.py"}
 
 
-async def test_upsert_empty_chunk_list_is_a_noop(index):
-    # Calling upsert_file_chunks with an empty list should not create rows.
+async def test_upsert_empty_chunk_list_inserts_nothing(index):
+    """Empty chunks + no prior rows → index stays empty."""
     await index.upsert_file_chunks("nothing.py", "sha1", [])
     assert "nothing.py" not in await index.all_indexed_paths()
+
+
+async def test_upsert_empty_chunk_list_clears_existing_rows(index):
+    """Empty chunks + prior rows for the same path → rows are deleted."""
+    await index.upsert_file_chunks(
+        "shrinking.py",
+        "sha_before",
+        [Chunk(file_path="shrinking.py", start_line=1, end_line=3, text="original body")],
+    )
+    assert await index.get_file_sha1("shrinking.py") == "sha_before"
+
+    await index.upsert_file_chunks("shrinking.py", "sha_after", [])
+    assert await index.get_file_sha1("shrinking.py") is None
+    assert "shrinking.py" not in await index.all_indexed_paths()
 
 
 async def test_delete_file_chunks_removes_both_tables(index):

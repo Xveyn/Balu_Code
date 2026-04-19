@@ -74,24 +74,29 @@ class RagIndex:
         await asyncio.to_thread(self._open_sync)
 
     def _open_sync(self) -> None:
+        if self._conn is not None:
+            return  # already open — idempotent
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.enable_load_extension(True)
         try:
-            sqlite_vec.load(conn)
-        except Exception as exc:
+            try:
+                sqlite_vec.load(conn)
+            except Exception as exc:
+                raise RagIndexUnavailable(f"sqlite-vec failed to load: {exc}") from exc
+            conn.enable_load_extension(False)
+            conn.executescript(_SCHEMA)
+            # vec0 virtual table: create separately because vec0 doesn't like being
+            # inside an executescript that also has other CREATE TABLE statements.
+            conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0("
+                f"embedding float[{self._vector_dim}])"
+            )
+            conn.commit()
+        except BaseException:
             conn.close()
-            raise RagIndexUnavailable(f"sqlite-vec failed to load: {exc}") from exc
-        conn.enable_load_extension(False)
-        conn.executescript(_SCHEMA)
-        # vec0 virtual table: create separately because vec0 doesn't like being
-        # inside an executescript that also has other CREATE TABLE statements.
-        conn.execute(
-            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0("
-            f"embedding float[{self._vector_dim}])"
-        )
-        conn.commit()
+            raise
         self._conn = conn
 
     async def close(self) -> None:
@@ -103,7 +108,15 @@ class RagIndex:
             self._conn = None
 
     async def upsert_file_chunks(self, file_path: str, file_sha1: str, chunks: list[Chunk]) -> None:
+        """Replace this file's chunks.
+
+        If ``chunks`` is empty, existing rows for ``file_path`` are removed
+        and no new rows are inserted. This keeps the index self-consistent
+        when a file shrinks to zero chunkable content (e.g. becomes empty
+        or contains only whitespace).
+        """
         if not chunks:
+            await self.delete_file_chunks(file_path)
             return
         embeddings = await self._ollama.embed(self._embed_model, [c.text for c in chunks])
         await asyncio.to_thread(self._upsert_sync, file_path, file_sha1, chunks, embeddings)
