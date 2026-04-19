@@ -189,7 +189,128 @@ class TestParseFrameExtended:
         assert isinstance(evt, ToolResult)
 
 
-def test_event_union_includes_all_seven():
+class TestApprovalRequest:
+    def test_constructs_with_all_fields(self):
+        from balu_code_shared.events import ApprovalRequest
+
+        evt = ApprovalRequest(
+            tool_call_id="tc_1",
+            tool="write_file",
+            args={"path": "foo.py", "content": "x"},
+            risk="write",
+        )
+        assert evt.type == "approval_request"
+        assert evt.tool_call_id == "tc_1"
+        assert evt.tool == "write_file"
+        assert evt.args == {"path": "foo.py", "content": "x"}
+        assert evt.risk == "write"
+
+    def test_rejects_empty_tool_call_id(self):
+        import pytest
+        from balu_code_shared.events import ApprovalRequest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ApprovalRequest(tool_call_id="", tool="t", args={}, risk="write")
+
+    def test_rejects_unknown_risk(self):
+        import pytest
+        from balu_code_shared.events import ApprovalRequest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ApprovalRequest(tool_call_id="tc_1", tool="t", args={}, risk="read")
+
+
+class TestApproval:
+    def test_approved_true(self):
+        from balu_code_shared.events import Approval
+
+        evt = Approval(tool_call_id="tc_1", approved=True)
+        assert evt.type == "approval"
+        assert evt.approved is True
+        assert evt.reason is None
+
+    def test_approved_false_with_reason(self):
+        from balu_code_shared.events import Approval
+
+        evt = Approval(
+            tool_call_id="tc_1",
+            approved=False,
+            reason="user said no",
+        )
+        assert evt.approved is False
+        assert evt.reason == "user said no"
+
+    def test_rejects_empty_tool_call_id(self):
+        import pytest
+        from balu_code_shared.events import Approval
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Approval(tool_call_id="", approved=True)
+
+
+class TestCancel:
+    def test_constructs_with_turn_id(self):
+        from balu_code_shared.events import Cancel
+
+        evt = Cancel(turn_id="t_1")
+        assert evt.type == "cancel"
+        assert evt.turn_id == "t_1"
+
+    def test_rejects_empty_turn_id(self):
+        import pytest
+        from balu_code_shared.events import Cancel
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Cancel(turn_id="")
+
+
+class TestStopReasonMaxTokens:
+    def test_max_tokens_is_valid(self):
+        evt = TurnEnd(
+            turn_id="t_1",
+            total_tokens=100,
+            iterations=2,
+            stop_reason="max_tokens",
+        )
+        assert evt.stop_reason == "max_tokens"
+
+
+class TestParseFrameNewEvents:
+    def test_parses_approval_request(self):
+        from balu_code_shared.events import ApprovalRequest, parse_frame
+
+        evt = parse_frame(
+            {
+                "type": "approval_request",
+                "tool_call_id": "tc_1",
+                "tool": "run_bash",
+                "args": {"command": "ls"},
+                "risk": "exec",
+            }
+        )
+        assert isinstance(evt, ApprovalRequest)
+        assert evt.risk == "exec"
+
+    def test_parses_approval(self):
+        from balu_code_shared.events import Approval, parse_frame
+
+        evt = parse_frame(
+            {"type": "approval", "tool_call_id": "tc_1", "approved": True}
+        )
+        assert isinstance(evt, Approval)
+
+    def test_parses_cancel(self):
+        from balu_code_shared.events import Cancel, parse_frame
+
+        evt = parse_frame({"type": "cancel", "turn_id": "t_1"})
+        assert isinstance(evt, Cancel)
+
+
+def test_event_union_includes_all_ten():
     import typing
 
     annotated_args = typing.get_args(Event)
@@ -204,4 +325,7 @@ def test_event_union_includes_all_seven():
         "error",
         "tool_call",
         "tool_result",
+        "approval_request",
+        "approval",
+        "cancel",
     }

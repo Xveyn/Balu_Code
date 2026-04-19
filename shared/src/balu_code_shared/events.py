@@ -33,7 +33,7 @@ class Token(_FrozenBase):
     content: str
 
 
-StopReason = Literal["done", "max_iter", "error", "cancelled"]
+StopReason = Literal["done", "max_iter", "max_tokens", "error", "cancelled"]
 
 
 class TurnEnd(_FrozenBase):
@@ -66,8 +66,37 @@ class ToolResult(_FrozenBase):
     error: str | None = None
 
 
+class ApprovalRequest(_FrozenBase):
+    type: Literal["approval_request"] = "approval_request"
+    tool_call_id: str = Field(..., min_length=1)
+    tool: str = Field(..., min_length=1)
+    args: dict[str, Any]
+    risk: Literal["write", "exec", "network"]
+
+
+class Approval(_FrozenBase):
+    type: Literal["approval"] = "approval"
+    tool_call_id: str = Field(..., min_length=1)
+    approved: bool
+    reason: str | None = None
+
+
+class Cancel(_FrozenBase):
+    type: Literal["cancel"] = "cancel"
+    turn_id: str = Field(..., min_length=1)
+
+
 Event = Annotated[
-    UserMessage | TurnStart | Token | TurnEnd | Error | ToolCall | ToolResult,
+    UserMessage
+    | TurnStart
+    | Token
+    | TurnEnd
+    | Error
+    | ToolCall
+    | ToolResult
+    | ApprovalRequest
+    | Approval
+    | Cancel,
     Field(discriminator="type"),
 ]
 
@@ -81,6 +110,9 @@ def parse_frame(data: dict[str, Any]) -> Event:
 
 
 __all__ = [
+    "Approval",
+    "ApprovalRequest",
+    "Cancel",
     "Error",
     "Event",
     "StopReason",
