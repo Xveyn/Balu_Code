@@ -24,6 +24,7 @@ from plugin.deps import (
 )
 from plugin.schemas import (
     IndexJobResponse,
+    IndexStatusResponse,
     ModelsResponse,
     ProjectCreate,
     ProjectsResponse,
@@ -240,8 +241,35 @@ def build_router() -> APIRouter:
                 detail=str(exc),
             ) from exc
 
-        return IndexJobResponse(
-            job_id=job.id, project_id=job.project_id, status=job.status
+        return IndexJobResponse(job_id=job.id, project_id=job.project_id, status=job.status)
+
+    @router.get(
+        "/projects/{project_id}/index/status/{job_id}",
+        response_model=IndexStatusResponse,
+        tags=["balu_code"],
+    )
+    async def index_job_status(
+        project_id: int,
+        job_id: str,
+        _user: UserPublic = Depends(get_current_user),
+        tracker: IndexJobTracker = Depends(get_index_job_tracker),
+    ) -> IndexStatusResponse:
+        job = tracker.get_job(job_id)
+        if job is None or job.project_id != project_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"indexing job {job_id} not found for project {project_id}",
+            )
+        return IndexStatusResponse(
+            job_id=job.id,
+            project_id=job.project_id,
+            status=job.status,
+            files_total=job.files_total,
+            files_processed=job.files_processed,
+            chunks_total=job.chunks_total,
+            error=job.error,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
         )
 
     return router

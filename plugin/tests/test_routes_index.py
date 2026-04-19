@@ -1,4 +1,5 @@
 """Tests for POST /projects/{id}/index."""
+
 from __future__ import annotations
 
 import asyncio
@@ -40,9 +41,7 @@ class _FakeRagRegistry:
     async def get(self, project_id: int) -> RagIndex:
         idx = self._indices.get(project_id)
         if idx is None:
-            idx = RagIndex(
-                self._tmp / f"rag_{project_id}.db", "nomic-embed-text", _FakeOllama()
-            )
+            idx = RagIndex(self._tmp / f"rag_{project_id}.db", "nomic-embed-text", _FakeOllama())
             await idx.open()
             self._indices[project_id] = idx
         return idx
@@ -60,8 +59,8 @@ def store(tmp_path) -> ProjectStore:
     s.close()
 
 
-def _make_project(store: ProjectStore, root: str) -> int:
-    p = store.create_project(name="idx-route", root_path=root, config_yaml=None)
+def _make_project(store: ProjectStore, root: str, name: str = "idx-route") -> int:
+    p = store.create_project(name=name, root_path=root, config_yaml=None)
     return p.id
 
 
@@ -76,7 +75,9 @@ def _client(store, rag_registry, tracker) -> TestClient:
     return TestClient(app)
 
 
-async def _wait_status(tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 3.0):
+async def _wait_status(
+    tracker: IndexJobTracker, job_id: str, target: JobStatus, timeout: float = 3.0
+):
     loop = asyncio.get_event_loop()
     deadline = loop.time() + timeout
     while loop.time() < deadline:
@@ -164,3 +165,55 @@ def test_post_index_401_when_auth_fails(tmp_path, store):
     c = TestClient(app)
     r = c.post(f"/api/plugins/balu_code/projects/{pid}/index")
     assert r.status_code == 401
+
+
+def test_status_404_on_unknown_job(tmp_path, store):
+    pid = _make_project(store, str(tmp_path))
+    registry = _FakeRagRegistry(tmp_path / "rag")
+    tracker = IndexJobTracker()
+    c = _client(store, registry, tracker)
+    r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/nonexistent")
+    assert r.status_code == 404
+
+
+def test_status_200_for_done_job(tmp_path, store):
+    """Test that status endpoint returns 200 for a completed job."""
+    from plugin.services.index_jobs import IndexJob
+
+    pid = _make_project(store, str(tmp_path), name="proj-done")
+    registry = _FakeRagRegistry(tmp_path / "rag")
+    tracker = IndexJobTracker()
+
+    # Inject a completed job directly
+    job = IndexJob(
+        id="j-done",
+        project_id=pid,
+        status=JobStatus.DONE,
+        files_total=1,
+        files_processed=1,
+        chunks_total=5,
+    )
+    tracker._jobs["j-done"] = job
+
+    c = _client(store, registry, tracker)
+    r = c.get(f"/api/plugins/balu_code/projects/{pid}/index/status/j-done")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "done"
+    assert body["files_processed"] == 1
+    assert body["chunks_total"] == 5
+
+
+def test_status_404_when_job_belongs_to_different_project(tmp_path, store):
+    from plugin.services.index_jobs import IndexJob
+
+    _make_project(store, str(tmp_path), name="proj1")
+    other_pid = _make_project(store, str(tmp_path / "sub"), name="proj2")
+
+    registry = _FakeRagRegistry(tmp_path / "rag")
+    tracker = IndexJobTracker()
+    injected = IndexJob(id="j-other", project_id=9999, status=JobStatus.DONE)
+    tracker._jobs["j-other"] = injected
+    c = _client(store, registry, tracker)
+    r = c.get(f"/api/plugins/balu_code/projects/{other_pid}/index/status/j-other")
+    assert r.status_code == 404
