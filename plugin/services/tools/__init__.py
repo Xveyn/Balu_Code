@@ -6,6 +6,9 @@ pre-populated with the Phase-4a read tools.
 from __future__ import annotations
 
 from plugin.services.tools.base import Tool, ToolContext, ToolResult
+from plugin.services.tools.glob_tool import GlobTool
+from plugin.services.tools.grep_tool import GrepTool
+from plugin.services.tools.read_file import ReadFileTool
 
 
 class ToolRegistry:
@@ -39,4 +42,19 @@ class ToolRegistry:
         ]
 
 
-__all__ = ["Tool", "ToolContext", "ToolRegistry", "ToolResult"]
+def default_registry() -> ToolRegistry:
+    """Return a ToolRegistry pre-populated with the Phase-4a read tools."""
+    reg = ToolRegistry()
+    reg.register(ReadFileTool())
+    reg.register(GlobTool())
+    reg.register(GrepTool())
+    return reg
+
+
+__all__ = [
+    "Tool",
+    "ToolContext",
+    "ToolRegistry",
+    "ToolResult",
+    "default_registry",
+]
