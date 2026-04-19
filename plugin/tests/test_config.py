@@ -29,3 +29,24 @@ def test_rejects_unknown_fields():
 
     with pytest.raises(ValidationError):
         BaluCodePluginConfig.model_validate({"ollama_base_url": "http://x", "unknown": 1})
+
+
+def test_defaults_for_phase_4a_fields():
+    c = BaluCodePluginConfig()
+    assert c.context_window == 32768
+    assert c.repo_map_budget == 6144
+    assert c.rag_budget == 4096
+    assert c.rag_top_k == 8
+    assert c.max_iterations == 12
+    assert c.max_total_tokens_per_turn == 80000
+    assert c.temperature == 0.2
+
+
+def test_temperature_rejects_out_of_range():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        BaluCodePluginConfig(temperature=-0.1)
+    with pytest.raises(ValidationError):
+        BaluCodePluginConfig(temperature=2.5)

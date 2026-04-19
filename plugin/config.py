@@ -9,7 +9,7 @@ settings.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaluCodePluginConfig(BaseModel):
@@ -18,6 +18,15 @@ class BaluCodePluginConfig(BaseModel):
     ollama_base_url: str = "http://127.0.0.1:11434"
     chat_model: str = "qwen2.5-coder:14b-instruct-q4_K_M"
     embed_model: str = "nomic-embed-text"
+
+    # Phase 4a agent-loop knobs
+    context_window: int = 32768
+    repo_map_budget: int = 6144
+    rag_budget: int = 4096
+    rag_top_k: int = 8
+    max_iterations: int = 12
+    max_total_tokens_per_turn: int = 80000
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
 
 
 __all__ = ["BaluCodePluginConfig"]
