@@ -1,16 +1,10 @@
-"""read_file tool — read a project-root-relative text file.
-
-Path containment is verified inline here rather than in a shared helper:
-Phase 4b extracts the check to ``plugin/services/paths.py`` when the
-write-side tools land and the same logic is needed twice.
-"""
+"""read_file tool — read a project-root-relative text file."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
+from plugin.services.paths import PathEscapesProjectError, resolve_within_project
 from plugin.services.tools.base import ToolContext, ToolResult
 
 
@@ -24,14 +18,6 @@ class ReadFileArgs(BaseModel):
     )
 
 
-def _contained(path: Path, root: Path) -> bool:
-    try:
-        path.resolve(strict=False).relative_to(root.resolve(strict=False))
-    except ValueError:
-        return False
-    return True
-
-
 class ReadFileTool:
     name = "read_file"
     description = (
@@ -42,14 +28,11 @@ class ReadFileTool:
     risk = "read"
 
     async def execute(self, args: ReadFileArgs, ctx: ToolContext) -> ToolResult:
-        candidate = ctx.project_root / args.path
-        if not _contained(candidate, ctx.project_root):
-            return ToolResult(
-                status="error",
-                text="",
-                error=f"path '{args.path}' escapes project root",
-            )
-        resolved = candidate.resolve(strict=False)
+        try:
+            resolved = resolve_within_project(ctx.project_root, args.path)
+        except PathEscapesProjectError as exc:
+            return ToolResult(status="error", text="", error=str(exc))
+
         if not resolved.exists():
             return ToolResult(
                 status="error",
