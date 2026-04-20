@@ -1,16 +1,4 @@
-"""Tool Protocol + lightweight value types.
-
-A tool is any object that conforms to the ``Tool`` Protocol:
-- ``name``, ``description``, ``risk`` class attributes
-- ``args_schema`` — a Pydantic BaseModel subclass describing the
-  tool's input arguments
-- async ``execute(args, ctx) -> ToolResult``
-
-``ToolContext`` carries the minimal per-turn state a tool needs
-(project_root for path resolution, project_id for logging, turn_id
-for correlation). Phase 4b will extend it with approval callbacks and
-audit-log hooks.
-"""
+"""Tool Protocol + lightweight value types."""
 
 from __future__ import annotations
 
@@ -20,12 +8,15 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
+from plugin.services.cancel import CancelToken
+
 
 @dataclass(frozen=True)
 class ToolContext:
     project_root: Path
     project_id: int
     turn_id: str
+    cancel_token: CancelToken
 
 
 @dataclass(frozen=True)

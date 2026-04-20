@@ -39,6 +39,7 @@ from plugin.services.project_store import Project
 from plugin.services.rag_index import RagIndex
 from plugin.services.repo_map import RepoMap
 from plugin.services.tokenizer import count_tokens
+from plugin.services.cancel import CancelToken
 from plugin.services.tools import ToolRegistry
 from plugin.services.tools.base import ToolContext
 
@@ -231,6 +232,7 @@ async def run_turn(
             project_root=Path(deps.project.root_path),
             project_id=deps.project.id,
             turn_id=turn_id,
+            cancel_token=CancelToken(),
         )
         for call in tool_calls_from_stream:
             function = call.get("function") or {}

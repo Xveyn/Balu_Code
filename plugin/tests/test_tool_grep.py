@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from plugin.services.cancel import CancelToken
 from plugin.services.tools.base import ToolContext
 from plugin.services.tools.grep_tool import GrepArgs, GrepTool
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
-    return ToolContext(project_root=tmp_path, project_id=1, turn_id="t_1")
+    return ToolContext(project_root=tmp_path, project_id=1, turn_id="t_1", cancel_token=CancelToken())
 
 
 async def test_finds_literal_match(tmp_path):
