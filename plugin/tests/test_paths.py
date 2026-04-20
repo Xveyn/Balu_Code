@@ -62,3 +62,23 @@ def test_normalises_redundant_separators(tmp_path: Path) -> None:
     (tmp_path / "a" / "b.txt").write_text("x")
     resolved = resolve_within_project(tmp_path, "a//b.txt")
     assert resolved == (tmp_path / "a" / "b.txt").resolve()
+
+
+def test_rejects_null_byte(tmp_path: Path) -> None:
+    with pytest.raises(PathEscapesProjectError):
+        resolve_within_project(tmp_path, "foo\x00bar")
+
+
+def test_rejects_windows_drive_letter_backslash(tmp_path: Path) -> None:
+    with pytest.raises(PathEscapesProjectError):
+        resolve_within_project(tmp_path, "C:\\foo.txt")
+
+
+def test_rejects_windows_drive_letter_forward(tmp_path: Path) -> None:
+    with pytest.raises(PathEscapesProjectError):
+        resolve_within_project(tmp_path, "C:/foo.txt")
+
+
+def test_rejects_unc_path(tmp_path: Path) -> None:
+    with pytest.raises(PathEscapesProjectError):
+        resolve_within_project(tmp_path, "\\\\server\\share\\file.txt")
