@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import json as _json
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
 
 from balu_code_cli.client.ws import BaluCodeWS, connect
 from balu_code_cli.config.balucode_yaml import BaluCodeYaml, load_balucode_yaml
 from balu_code_cli.config.loader import load_credentials
-from balu_code_cli.config.permissions import PermissionsStore, load_permissions, save_permissions
+from balu_code_cli.config.permissions import PermissionsStore, load_permissions
 from balu_code_cli.config.paths import permissions_yaml as _permissions_yaml
 
 app = typer.Typer(help="Start an interactive chat session.")
@@ -85,8 +83,6 @@ async def _dispatch_turn(
 
         elif event.type == "error":
             console.print(f"[red]Error [{event.code}]: {event.message}[/red]")
-
-    return turn_id
 
 
 async def run_chat(
