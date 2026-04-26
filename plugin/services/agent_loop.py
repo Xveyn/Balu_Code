@@ -221,18 +221,18 @@ async def run_turn(
                 if frame.get("done"):
                     break
 
-        # Some models (e.g. qwen2.5-coder) serialize tool calls as a JSON
-        # object in message.content instead of using message.tool_calls.
-        # Detect and promote that pattern so the tool execution path fires.
-        if not tool_calls_from_stream and buffered_content:
-            promoted = _try_parse_inline_tool_call(buffered_content)
-            if promoted:
-                tool_calls_from_stream = promoted
-                buffered_content = ""
-            else:
-                # Real text response — stream tokens to client now.
-                for piece in _rechunk(buffered_content):
-                    await emit(Token(content=piece))
+            # Some models (e.g. qwen2.5-coder) serialize tool calls as a JSON
+            # object in message.content instead of using message.tool_calls.
+            # Detect and promote that pattern so the tool execution path fires.
+            if not tool_calls_from_stream and buffered_content:
+                promoted = _try_parse_inline_tool_call(buffered_content)
+                if promoted:
+                    tool_calls_from_stream = promoted
+                    buffered_content = ""
+                else:
+                    # Real text response — stream tokens to client now.
+                    for piece in _rechunk(buffered_content):
+                        await emit(Token(content=piece))
         except OllamaUnreachable as exc:
             history[:] = history_snapshot
             await emit(Error(code="ollama_unreachable", message=str(exc)))
