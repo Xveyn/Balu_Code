@@ -70,7 +70,7 @@ class BaluCodePlugin(PluginBase):
 
         return PluginUIManifest(
             enabled=True,
-            bundle_path="ui/bundle.js",
+            bundle_path="bundle.js",
             nav_items=[
                 PluginNavItem(path="/", label="Balu Code", icon="code-2", order=10),
             ],
