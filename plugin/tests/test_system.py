@@ -74,8 +74,8 @@ def test_get_gpu_info_nvidia_fallback():
     assert info is not None
     assert info["backend"] == "nvidia"
     assert info["utilization_pct"] == 65
-    assert info["vram_used_bytes"] == 8192 * 1_000_000
-    assert info["vram_total_bytes"] == 24576 * 1_000_000
+    assert info["vram_used_bytes"] == 8192 * 1_048_576
+    assert info["vram_total_bytes"] == 24576 * 1_048_576
 
 
 def test_get_gpu_info_returns_none_when_no_tools():

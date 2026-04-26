@@ -12,7 +12,7 @@ def _run(cmd: list[str]) -> str | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError):
         pass
     return None
 
@@ -57,7 +57,7 @@ def _parse_rocm_smi(output: str) -> dict | None:
             "vram_used_bytes": int(vram_used),
             "vram_total_bytes": int(vram_total),
         }
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError, StopIteration):
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
         return None
 
 
@@ -71,8 +71,8 @@ def _parse_nvidia_smi(output: str) -> dict | None:
             "available": True,
             "backend": "nvidia",
             "utilization_pct": util,
-            "vram_used_bytes": mem_used_mb * 1_000_000,
-            "vram_total_bytes": mem_total_mb * 1_000_000,
+            "vram_used_bytes": mem_used_mb * 1_048_576,
+            "vram_total_bytes": mem_total_mb * 1_048_576,
         }
     except (ValueError, IndexError):
         return None
