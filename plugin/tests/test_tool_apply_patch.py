@@ -1,4 +1,5 @@
 """Tests for apply_patch tool."""
+
 from __future__ import annotations
 
 from pathlib import Path

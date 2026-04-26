@@ -1,4 +1,5 @@
 """Tests for config/loader.py and config/paths.py."""
+
 from __future__ import annotations
 
 from balu_code_cli.config.loader import (
@@ -17,6 +18,7 @@ def test_config_dir_uses_xdg_config_home(monkeypatch, tmp_path):
     import importlib
 
     import balu_code_cli.config.paths as paths_mod
+
     importlib.reload(paths_mod)
     assert paths_mod.config_dir() == tmp_path / "balu-code"
 
@@ -27,6 +29,7 @@ def test_config_dir_defaults_to_home_config(monkeypatch, tmp_path):
     import importlib
 
     import balu_code_cli.config.paths as paths_mod
+
     importlib.reload(paths_mod)
     assert paths_mod.config_dir() == tmp_path / ".config" / "balu-code"
 
@@ -53,7 +56,9 @@ def test_load_credentials_returns_empty_when_file_missing(tmp_path):
 
 def test_save_credentials_sets_mode_0600(tmp_path):
     path = tmp_path / "credentials.yaml"
-    creds = Credentials(servers={"https://balu.example.com": ServerCredentials(api_key="bc_abc123")})
+    creds = Credentials(
+        servers={"https://balu.example.com": ServerCredentials(api_key="bc_abc123")}
+    )
     save_credentials(creds, path)
     assert oct(path.stat().st_mode)[-3:] == "600"
 

@@ -37,9 +37,7 @@ def resolve_within_project(project_root: Path, rel_path: str) -> Path:
     try:
         candidate.relative_to(root_resolved)
     except ValueError as exc:
-        raise PathEscapesProjectError(
-            f"path '{rel_path}' escapes the project root"
-        ) from exc
+        raise PathEscapesProjectError(f"path '{rel_path}' escapes the project root") from exc
 
     return candidate
 

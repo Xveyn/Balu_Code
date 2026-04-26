@@ -1,4 +1,5 @@
 """Tests for commands/config.py."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -11,8 +12,10 @@ runner = CliRunner()
 
 
 def test_config_get_server_url():
-    with patch("balu_code_cli.commands.config.load_config",
-               return_value=AppConfig(server_url="https://example.com")):
+    with patch(
+        "balu_code_cli.commands.config.load_config",
+        return_value=AppConfig(server_url="https://example.com"),
+    ):
         result = runner.invoke(app, ["get", "server_url"])
     assert result.exit_code == 0
     assert "https://example.com" in result.output
@@ -31,8 +34,10 @@ def test_config_set_default_project_id():
     def fake_save(cfg, path=None):
         saved["cfg"] = cfg
 
-    with patch("balu_code_cli.commands.config.load_config", return_value=AppConfig()), \
-         patch("balu_code_cli.commands.config.save_config", side_effect=fake_save):
+    with (
+        patch("balu_code_cli.commands.config.load_config", return_value=AppConfig()),
+        patch("balu_code_cli.commands.config.save_config", side_effect=fake_save),
+    ):
         result = runner.invoke(app, ["set", "default_project_id", "7"])
     assert result.exit_code == 0
     assert saved["cfg"].default_project_id == 7
@@ -44,8 +49,10 @@ def test_config_set_server_url():
     def fake_save(cfg, path=None):
         saved["cfg"] = cfg
 
-    with patch("balu_code_cli.commands.config.load_config", return_value=AppConfig()), \
-         patch("balu_code_cli.commands.config.save_config", side_effect=fake_save):
+    with (
+        patch("balu_code_cli.commands.config.load_config", return_value=AppConfig()),
+        patch("balu_code_cli.commands.config.save_config", side_effect=fake_save),
+    ):
         result = runner.invoke(app, ["set", "server_url", "https://new.example.com"])
     assert result.exit_code == 0
     assert saved["cfg"].server_url == "https://new.example.com"

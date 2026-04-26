@@ -78,6 +78,7 @@ class BaluCodePlugin(PluginBase):
 
     async def on_startup(self) -> None:
         from plugin.services.config_store import load_plugin_config
+
         data_dir = resolve_data_dir()
         self._config = load_plugin_config(data_dir)
         store = ProjectStore(data_dir / "store.db")

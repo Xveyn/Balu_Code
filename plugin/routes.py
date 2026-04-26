@@ -379,7 +379,9 @@ def build_router() -> APIRouter:
 
                 if isinstance(frame, UserMessage):
                     if _turn_task is not None and not _turn_task.done():
-                        await _emit(Error(code="turn_in_flight", message="a turn is already running"))
+                        await _emit(
+                            Error(code="turn_in_flight", message="a turn is already running")
+                        )
                         continue
                     ctx = TurnContext(
                         turn_id=f"t_{uuid.uuid4().hex[:12]}",
@@ -394,20 +396,27 @@ def build_router() -> APIRouter:
                     continue
 
                 if isinstance(frame, Approval):
-                    fut = (_turn_ctx.pending_approvals.pop(frame.tool_call_id, None)
-                           if _turn_ctx is not None else None)
+                    fut = (
+                        _turn_ctx.pending_approvals.pop(frame.tool_call_id, None)
+                        if _turn_ctx is not None
+                        else None
+                    )
                     if fut is None:
-                        await _emit(Error(
-                            code="unknown_approval",
-                            message=f"no pending request for {frame.tool_call_id}",
-                        ))
+                        await _emit(
+                            Error(
+                                code="unknown_approval",
+                                message=f"no pending request for {frame.tool_call_id}",
+                            )
+                        )
                     elif not fut.done():
                         fut.set_result(frame)
                     continue
 
                 if isinstance(frame, Cancel):
                     if _turn_ctx is None or frame.turn_id != _turn_ctx.turn_id:
-                        await _emit(Error(code="no_turn_to_cancel", message="no matching turn in flight"))
+                        await _emit(
+                            Error(code="no_turn_to_cancel", message="no matching turn in flight")
+                        )
                         continue
                     _turn_ctx.cancel_token.cancel()
                     for fut in list(_turn_ctx.pending_approvals.values()):
@@ -415,10 +424,12 @@ def build_router() -> APIRouter:
                             fut.cancel()
                     continue
 
-                await _emit(Error(
-                    code="unsupported_frame",
-                    message=f"frame type '{frame.type}' is not supported",
-                ))
+                await _emit(
+                    Error(
+                        code="unsupported_frame",
+                        message=f"frame type '{frame.type}' is not supported",
+                    )
+                )
         except WebSocketDisconnect:
             if _turn_task is not None and not _turn_task.done():
                 _turn_task.cancel()

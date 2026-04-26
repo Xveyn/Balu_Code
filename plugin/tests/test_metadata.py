@@ -37,6 +37,7 @@ def test_plugin_category_is_general():
 
 def test_get_ui_manifest_returns_manifest_with_nav_item():
     from app.plugins.base import PluginUIManifest
+
     p = BaluCodePlugin()
     manifest = p.get_ui_manifest()
     assert isinstance(manifest, PluginUIManifest)

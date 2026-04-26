@@ -1,4 +1,5 @@
 """Tests for session/writer.py."""
+
 from __future__ import annotations
 
 import json
@@ -64,8 +65,13 @@ def test_written_lines_are_valid_json(tmp_path):
 
     class FakeEvent:
         def model_dump(self):
-            return {"type": "turn_end", "turn_id": "t1", "total_tokens": 50,
-                    "iterations": 1, "stop_reason": "done"}
+            return {
+                "type": "turn_end",
+                "turn_id": "t1",
+                "total_tokens": 50,
+                "iterations": 1,
+                "stop_reason": "done",
+            }
 
     with SessionWriter(path) as w:
         w.write_sent({"type": "user_message", "content": "test"})

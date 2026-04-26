@@ -59,6 +59,7 @@ def test_put_config_updates_and_persists(tmp_path):
     assert body["chat_model"] == "qwen2.5-coder:7b"
     assert body["temperature"] == 0.8
     from plugin.services.config_store import load_plugin_config
+
     saved = load_plugin_config(tmp_path)
     assert saved.chat_model == "qwen2.5-coder:7b"
 

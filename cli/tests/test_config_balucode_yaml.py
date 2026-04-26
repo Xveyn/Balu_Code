@@ -1,4 +1,5 @@
 """Tests for config/balucode_yaml.py."""
+
 from __future__ import annotations
 
 import pytest
@@ -42,8 +43,10 @@ def test_is_tool_allowed_write_file_when_allow_write_false():
 
 def test_is_tool_allowed_write_file_when_allow_write_true():
     from balu_code_cli.config.balucode_yaml import ToolsConfig
-    cfg = BaluCodeYaml(project_id=1, server_url="https://x.com",
-                       tools=ToolsConfig(allow_write=True))
+
+    cfg = BaluCodeYaml(
+        project_id=1, server_url="https://x.com", tools=ToolsConfig(allow_write=True)
+    )
     assert cfg.is_tool_allowed("write_file") is True
     assert cfg.is_tool_allowed("apply_patch") is True
 

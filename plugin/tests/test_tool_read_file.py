@@ -10,7 +10,9 @@ from plugin.services.tools.read_file import ReadFileArgs, ReadFileTool
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
-    return ToolContext(project_root=tmp_path, project_id=1, turn_id="t_1", cancel_token=CancelToken())
+    return ToolContext(
+        project_root=tmp_path, project_id=1, turn_id="t_1", cancel_token=CancelToken()
+    )
 
 
 async def test_reads_utf8_file(tmp_path):

@@ -101,6 +101,7 @@ class _TrackingAuditLogger:
     async def record_tool_call(self, **kw) -> None:
         self.calls.append(kw)
         import asyncio as _asyncio
+
         await _asyncio.sleep(0)  # yield to event loop so cancel frames can be processed
 
 
@@ -231,10 +232,12 @@ def test_chat_approval_resolves_write_tool(tmp_path, store):
     (tmp_path / "f.py").write_text("x\n")
     pid = _make_project(store, str(tmp_path))
     _tool_call = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
-    ollama = _FakeOllama([
-        [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
-        [{"message": {"content": "all done", "tool_calls": None}, "done": True}],
-    ])
+    ollama = _FakeOllama(
+        [
+            [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
+            [{"message": {"content": "all done", "tool_calls": None}, "done": True}],
+        ]
+    )
     c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig())
     with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
         ws.send_json({"type": "user_message", "content": "write something"})
@@ -259,9 +262,11 @@ def test_chat_cancel_at_approval_gate_stops_turn(tmp_path, store):
     (tmp_path / "f.py").write_text("x\n")
     pid = _make_project(store, str(tmp_path))
     _tool_call = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
-    ollama = _FakeOllama([
-        [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
-    ])
+    ollama = _FakeOllama(
+        [
+            [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
+        ]
+    )
     c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig())
     with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
         ws.send_json({"type": "user_message", "content": "write something"})
@@ -288,12 +293,16 @@ class TestApprovalFlowE2E:
         (tmp_path / "f.py").write_text("x\n")
         pid = _make_project(store, str(tmp_path))
         _tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
-        ollama = _FakeOllama([
-            [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
-            [{"message": {"content": "done", "tool_calls": None}, "done": True}],
-        ])
+        ollama = _FakeOllama(
+            [
+                [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
         audit = _TrackingAuditLogger()
-        c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit)
+        c = _client(
+            store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit
+        )
         with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
             ws.send_json({"type": "user_message", "content": "write something"})
             tc_id = None
@@ -320,12 +329,16 @@ class TestApprovalFlowE2E:
         (tmp_path / "f.py").write_text("x\n")
         pid = _make_project(store, str(tmp_path))
         _tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
-        ollama = _FakeOllama([
-            [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
-            [{"message": {"content": "done", "tool_calls": None}, "done": True}],
-        ])
+        ollama = _FakeOllama(
+            [
+                [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
         audit = _TrackingAuditLogger()
-        c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit)
+        c = _client(
+            store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit
+        )
         with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
             ws.send_json({"type": "user_message", "content": "write something"})
             tc_id = None
@@ -337,7 +350,14 @@ class TestApprovalFlowE2E:
                 if ev["type"] == "turn_end":
                     break
             assert tc_id is not None
-            ws.send_json({"type": "approval", "tool_call_id": tc_id, "approved": False, "reason": "no thanks"})
+            ws.send_json(
+                {
+                    "type": "approval",
+                    "tool_call_id": tc_id,
+                    "approved": False,
+                    "reason": "no thanks",
+                }
+            )
             events = []
             while True:
                 ev = ws.receive_json()
@@ -353,7 +373,9 @@ class TestApprovalFlowE2E:
     def test_unknown_approval_returns_error_frame(self, tmp_path, store):
         (tmp_path / "f.py").write_text("x\n")
         pid = _make_project(store, str(tmp_path))
-        c = _client(store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig())
+        c = _client(
+            store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig()
+        )
         with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
             ws.send_json({"type": "approval", "tool_call_id": "bogus_tc", "approved": True})
             ev = ws.receive_json()
@@ -362,17 +384,21 @@ class TestApprovalFlowE2E:
 
 
 class TestCancelFlowE2E:
-    def test_cancel_after_first_tool_during_second_approval_ends_turn_cancelled(self, tmp_path, store):
+    def test_cancel_after_first_tool_during_second_approval_ends_turn_cancelled(
+        self, tmp_path, store
+    ):
         # Iter 1: read_file (auto-approved) → ToolResult
         # Iter 2: echo (write, needs approval) → ApprovalRequest, then Cancel
         (tmp_path / "f.py").write_text("content\n")
         pid = _make_project(store, str(tmp_path))
         _read_tc = [{"function": {"name": "read_file", "arguments": {"path": "f.py"}}}]
         _echo_tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
-        ollama = _FakeOllama([
-            [{"message": {"content": "", "tool_calls": _read_tc}, "done": True}],
-            [{"message": {"content": "", "tool_calls": _echo_tc}, "done": True}],
-        ])
+        ollama = _FakeOllama(
+            [
+                [{"message": {"content": "", "tool_calls": _read_tc}, "done": True}],
+                [{"message": {"content": "", "tool_calls": _echo_tc}, "done": True}],
+            ]
+        )
         registry = ToolRegistry()
         registry.register(ReadFileTool())
         registry.register(_EchoWriteTool())
@@ -399,7 +425,9 @@ class TestCancelFlowE2E:
     def test_cancel_wrong_turn_id_returns_error(self, tmp_path, store):
         (tmp_path / "f.py").write_text("x\n")
         pid = _make_project(store, str(tmp_path))
-        c = _client(store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig())
+        c = _client(
+            store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig()
+        )
         with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
             ws.send_json({"type": "cancel", "turn_id": "bogus_turn"})
             ev = ws.receive_json()

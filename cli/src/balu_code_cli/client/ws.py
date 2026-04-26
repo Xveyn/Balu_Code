@@ -40,9 +40,7 @@ class BaluCodeWS:
 
 
 @asynccontextmanager
-async def connect(
-    server_url: str, api_key: str, project_id: int
-) -> AsyncIterator[BaluCodeWS]:
+async def connect(server_url: str, api_key: str, project_id: int) -> AsyncIterator[BaluCodeWS]:
     url = _ws_url(server_url, project_id)
     extra = {"Authorization": f"Bearer {api_key}"}
     async with websockets.connect(url, additional_headers=extra) as ws:

@@ -34,7 +34,7 @@ async def _default_input(prompt: str = "") -> str:
 
 
 def _format_args(args: dict) -> str:
-    parts = [f'{k}={repr(v)[:40]}' for k, v in list(args.items())[:3]]
+    parts = [f"{k}={repr(v)[:40]}" for k, v in list(args.items())[:3]]
     return ", ".join(parts)
 
 
@@ -68,11 +68,13 @@ async def _handle_approval(
 
     # Priority 4: interactive prompt
     args_preview = _json.dumps(event.args)[:200]
-    console.print(Panel(
-        f"Tool:  [bold]{tool_name}[/bold]  [dim][risk: {event.risk}][/dim]\n"
-        f"Args:  {args_preview}",
-        title="Approval required",
-    ))
+    console.print(
+        Panel(
+            f"Tool:  [bold]{tool_name}[/bold]  [dim][risk: {event.risk}][/dim]\n"
+            f"Args:  {args_preview}",
+            title="Approval required",
+        )
+    )
 
     choice = await input_fn("Allow? [y]es / [n]o / [Y]es always / [N]o always > ")
     choice = choice.strip()
@@ -206,10 +208,12 @@ def chat(
     sess_path = _sessions_dir(balucode.server_url, pid) / f"{ts}_{user}_{uid}.jsonl"
     writer = SessionWriter(sess_path)
 
-    asyncio.run(run_chat(
-        balucode=balucode,
-        api_key=api_key,
-        yolo=yolo,
-        project_id=pid,
-        session_writer=writer,
-    ))
+    asyncio.run(
+        run_chat(
+            balucode=balucode,
+            api_key=api_key,
+            yolo=yolo,
+            project_id=pid,
+            session_writer=writer,
+        )
+    )

@@ -67,4 +67,6 @@ def init() -> None:
         },
     }
     balucode_path.write_text(yaml.dump(data))
-    console.print(f"[green]Project #{project_id} initialised.[/green] Run `balu-code index` to build the RAG index.")
+    console.print(
+        f"[green]Project #{project_id} initialised.[/green] Run `balu-code index` to build the RAG index."
+    )

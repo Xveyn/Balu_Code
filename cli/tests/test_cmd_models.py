@@ -1,4 +1,5 @@
 """Tests for commands/models.py."""
+
 from __future__ import annotations
 
 import httpx
@@ -15,6 +16,7 @@ def _setup(tmp_path, monkeypatch):
     import importlib
 
     import balu_code_cli.config.paths as p
+
     importlib.reload(p)
     from balu_code_cli.config.loader import (
         AppConfig,
@@ -23,6 +25,7 @@ def _setup(tmp_path, monkeypatch):
         save_config,
         save_credentials,
     )
+
     save_config(AppConfig(server_url="https://balu.example.com"), p.config_yaml())
     save_credentials(
         Credentials(servers={"https://balu.example.com": ServerCredentials(api_key="bc_key")}),
@@ -34,12 +37,15 @@ def _setup(tmp_path, monkeypatch):
 def test_models_lists_names(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch)
     respx.get(f"{BASE}/models").mock(
-        return_value=httpx.Response(200, json={
-            "models": [
-                {"name": "llama3.1:8b", "size": 4_000_000_000, "digest": "abc"},
-                {"name": "codellama:7b", "size": 3_500_000_000, "digest": "def"},
-            ]
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "models": [
+                    {"name": "llama3.1:8b", "size": 4_000_000_000, "digest": "abc"},
+                    {"name": "codellama:7b", "size": 3_500_000_000, "digest": "def"},
+                ]
+            },
+        )
     )
     result = runner.invoke(app, ["models"])
     assert result.exit_code == 0

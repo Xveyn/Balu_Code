@@ -1,4 +1,5 @@
 """Tests for commands/init.py."""
+
 from __future__ import annotations
 
 import httpx
@@ -16,6 +17,7 @@ def _setup_auth(tmp_path, monkeypatch):
     import importlib
 
     import balu_code_cli.config.paths as p
+
     importlib.reload(p)
     from balu_code_cli.config.loader import (
         AppConfig,
@@ -24,6 +26,7 @@ def _setup_auth(tmp_path, monkeypatch):
         save_config,
         save_credentials,
     )
+
     save_config(AppConfig(server_url="https://balu.example.com"), p.config_yaml())
     save_credentials(
         Credentials(servers={"https://balu.example.com": ServerCredentials(api_key="bc_key")}),
@@ -37,14 +40,19 @@ def test_init_creates_balucode_yaml(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     respx.get(f"{BASE}/models").mock(
-        return_value=httpx.Response(200, json={"models": [{"name": "llama3.1:8b", "size": 1, "digest": "a"}]})
+        return_value=httpx.Response(
+            200, json={"models": [{"name": "llama3.1:8b", "size": 1, "digest": "a"}]}
+        )
     )
     respx.post(f"{BASE}/projects").mock(
-        return_value=httpx.Response(201, json={"id": 7, "name": "myproj", "root_path": str(tmp_path)})
+        return_value=httpx.Response(
+            201, json={"id": 7, "name": "myproj", "root_path": str(tmp_path)}
+        )
     )
 
     result = runner.invoke(
-        app, ["init"],
+        app,
+        ["init"],
         input=f"myproj\n{tmp_path}\nllama3.1:8b\n",
     )
     assert result.exit_code == 0, result.output
@@ -63,7 +71,9 @@ def test_init_aborts_if_balucode_yaml_exists_and_user_declines(tmp_path, monkeyp
     (tmp_path / ".balucode.yaml").write_text("project_id: 1\nserver_url: x\n")
 
     respx.get(f"{BASE}/models").mock(
-        return_value=httpx.Response(200, json={"models": [{"name": "llama3.1:8b", "size": 1, "digest": "a"}]})
+        return_value=httpx.Response(
+            200, json={"models": [{"name": "llama3.1:8b", "size": 1, "digest": "a"}]}
+        )
     )
 
     result = runner.invoke(app, ["init"], input="n\n")

@@ -1,4 +1,5 @@
 """Tests for config/permissions.py."""
+
 from __future__ import annotations
 
 from balu_code_cli.config.permissions import (

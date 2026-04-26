@@ -28,11 +28,13 @@ class SessionWriter:
 
     def _write(self, direction: str, payload: dict) -> None:
         self._open()
-        line = json.dumps({
-            "direction": direction,
-            "ts": datetime.now(UTC).isoformat(),
-            "payload": payload,
-        })
+        line = json.dumps(
+            {
+                "direction": direction,
+                "ts": datetime.now(UTC).isoformat(),
+                "payload": payload,
+            }
+        )
         self._fh.write(line + "\n")
         self._fh.flush()
 

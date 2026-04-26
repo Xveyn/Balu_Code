@@ -1,4 +1,5 @@
 """Tests for CancelToken."""
+
 from __future__ import annotations
 
 import asyncio

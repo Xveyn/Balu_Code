@@ -1,4 +1,5 @@
 """Module-level singletons for the balu_code plugin."""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -33,9 +33,9 @@ def test_build_vendors_balu_code_shared(tmp_path):
     artefact = build_bhplugin(REPO_ROOT, tmp_path)
     with zipfile.ZipFile(artefact) as zf:
         names = set(zf.namelist())
-    assert any(n.startswith("balu_code_shared/") and n.endswith(".py") for n in names), (
-        "expected vendored balu_code_shared/ tree"
-    )
+    assert any(
+        n.startswith("balu_code_shared/") and n.endswith(".py") for n in names
+    ), "expected vendored balu_code_shared/ tree"
     assert "balu_code_shared/events.py" in names
 
 

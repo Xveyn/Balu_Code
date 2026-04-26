@@ -1,4 +1,5 @@
 """Tests for commands/index.py."""
+
 from __future__ import annotations
 
 import httpx
@@ -15,6 +16,7 @@ def _setup(tmp_path, monkeypatch):
     import importlib
 
     import balu_code_cli.config.paths as p
+
     importlib.reload(p)
     from balu_code_cli.config.loader import (
         AppConfig,
@@ -23,6 +25,7 @@ def _setup(tmp_path, monkeypatch):
         save_config,
         save_credentials,
     )
+
     save_config(AppConfig(server_url="https://balu.example.com"), p.config_yaml())
     save_credentials(
         Credentials(servers={"https://balu.example.com": ServerCredentials(api_key="bc_key")}),
@@ -39,14 +42,25 @@ def test_index_polls_until_done(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     respx.post(f"{BASE}/projects/3/index").mock(
-        return_value=httpx.Response(202, json={"job_id": "j1", "project_id": 3, "status": "running"})
+        return_value=httpx.Response(
+            202, json={"job_id": "j1", "project_id": 3, "status": "running"}
+        )
     )
     respx.get(f"{BASE}/projects/3/index/status/j1").mock(
-        return_value=httpx.Response(200, json={
-            "job_id": "j1", "project_id": 3, "status": "done",
-            "files_total": 20, "files_processed": 20, "chunks_total": 150,
-            "error": None, "started_at": None, "finished_at": None,
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "job_id": "j1",
+                "project_id": 3,
+                "status": "done",
+                "files_total": 20,
+                "files_processed": 20,
+                "chunks_total": 150,
+                "error": None,
+                "started_at": None,
+                "finished_at": None,
+            },
+        )
     )
     result = runner.invoke(app, ["index"])
     assert result.exit_code == 0
@@ -62,14 +76,25 @@ def test_index_shows_error_on_failure(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     respx.post(f"{BASE}/projects/3/index").mock(
-        return_value=httpx.Response(202, json={"job_id": "j2", "project_id": 3, "status": "running"})
+        return_value=httpx.Response(
+            202, json={"job_id": "j2", "project_id": 3, "status": "running"}
+        )
     )
     respx.get(f"{BASE}/projects/3/index/status/j2").mock(
-        return_value=httpx.Response(200, json={
-            "job_id": "j2", "project_id": 3, "status": "failed",
-            "files_total": 0, "files_processed": 0, "chunks_total": 0,
-            "error": "disk full", "started_at": None, "finished_at": None,
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "job_id": "j2",
+                "project_id": 3,
+                "status": "failed",
+                "files_total": 0,
+                "files_processed": 0,
+                "chunks_total": 0,
+                "error": "disk full",
+                "started_at": None,
+                "finished_at": None,
+            },
+        )
     )
     result = runner.invoke(app, ["index"])
     assert result.exit_code != 0

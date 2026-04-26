@@ -1,4 +1,5 @@
 """Tests for write_file tool."""
+
 from __future__ import annotations
 
 from pathlib import Path

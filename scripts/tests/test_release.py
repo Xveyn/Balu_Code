@@ -16,6 +16,7 @@ def test_bump_plugin_json(tmp_path, monkeypatch):
     pj = tmp_path / "plugin.json"
     pj.write_text(json.dumps({"name": "balu_code", "version": "0.0.1", "other": "x"}))
     import scripts.release as rel
+
     monkeypatch.setattr(rel, "PLUGIN_JSON", pj)
     rel.bump_plugin_json("0.1.0")
     data = json.loads(pj.read_text())
@@ -27,6 +28,7 @@ def test_bump_pyproject(tmp_path, monkeypatch):
     pp = tmp_path / "pyproject.toml"
     pp.write_text('[project]\nname = "balu-code-cli"\nversion = "0.0.1"\n')
     import scripts.release as rel
+
     monkeypatch.setattr(rel, "CLI_PYPROJECT", pp)
     rel.bump_pyproject("0.1.0")
     assert 'version = "0.1.0"' in pp.read_text()
@@ -34,12 +36,14 @@ def test_bump_pyproject(tmp_path, monkeypatch):
 
 def test_check_clean_tree_passes_on_clean(monkeypatch):
     import scripts.release as rel
+
     monkeypatch.setattr(rel, "run", lambda cmd, **kw: "")
     rel.check_clean_tree()  # must not raise
 
 
 def test_check_clean_tree_fails_on_dirty(monkeypatch):
     import scripts.release as rel
+
     monkeypatch.setattr(rel, "run", lambda cmd, **kw: " M plugin/plugin.json")
     with pytest.raises(SystemExit):
         rel.check_clean_tree()
@@ -51,6 +55,7 @@ def test_version_strip_v_prefix(tmp_path, monkeypatch):
     pp = tmp_path / "pyproject.toml"
     pp.write_text('version = "0.0.1"\n')
     import scripts.release as rel
+
     monkeypatch.setattr(rel, "PLUGIN_JSON", pj)
     monkeypatch.setattr(rel, "CLI_PYPROJECT", pp)
     monkeypatch.setattr(rel, "run", lambda *a, **kw: "")

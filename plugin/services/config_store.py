@@ -1,4 +1,5 @@
 """Persist and load BaluCodePluginConfig as JSON in the plugin data dir."""
+
 from __future__ import annotations
 
 import json
