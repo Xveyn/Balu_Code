@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = os.environ.get("XDG_CONFIG_HOME") or None
     base = Path(xdg) if xdg else Path.home() / ".config"
     return base / "balu-code"
 
