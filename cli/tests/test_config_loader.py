@@ -5,11 +5,19 @@ import os
 from pathlib import Path
 
 import pytest
+from balu_code_cli.config.loader import (
+    AppConfig,
+    Credentials,
+    ServerCredentials,
+    load_config,
+    load_credentials,
+    save_config,
+    save_credentials,
+)
 
 
 def test_config_dir_uses_xdg_config_home(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    # Re-import after env change to pick up new value
     import importlib
     import balu_code_cli.config.paths as paths_mod
     importlib.reload(paths_mod)
@@ -23,17 +31,6 @@ def test_config_dir_defaults_to_home_config(monkeypatch, tmp_path):
     import balu_code_cli.config.paths as paths_mod
     importlib.reload(paths_mod)
     assert paths_mod.config_dir() == tmp_path / ".config" / "balu-code"
-
-
-from balu_code_cli.config.loader import (
-    AppConfig,
-    Credentials,
-    ServerCredentials,
-    load_config,
-    load_credentials,
-    save_config,
-    save_credentials,
-)
 
 
 def test_load_config_returns_defaults_when_file_missing(tmp_path):

@@ -49,8 +49,13 @@ def load_credentials(path: Path | None = None) -> Credentials:
 def save_credentials(creds: Credentials, path: Path | None = None) -> None:
     p = path or credentials_yaml()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.dump(creds.model_dump()))
-    os.chmod(p, 0o600)
+    content = yaml.dump(creds.model_dump()).encode()
+    fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, content)
+    finally:
+        os.close(fd)
+    os.chmod(p, 0o600)  # ensure correct mode on pre-existing files
 
 
 __all__ = [
