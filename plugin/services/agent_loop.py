@@ -48,6 +48,8 @@ from .repo_map import RepoMap
 from .tokenizer import count_messages_tokens, count_tokens
 from .tools import ToolRegistry
 from .tools.base import ToolContext
+from datetime import datetime, timezone
+from .active_turn import ActiveTurn, clear_active, set_active, update_iterations
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system.md"
 _TOOL_USE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "tool_use.md"
@@ -177,187 +179,35 @@ async def run_turn(
             context_tokens=assembled.context_tokens,
         )
     )
+    set_active(ActiveTurn(
+        turn_id=turn_id,
+        model=deps.config.chat_model,
+        started_at=datetime.now(timezone.utc),
+        iterations=0,
+        username=ctx.username,
+    ))
+    _final_frame: dict = {}
 
     total_tokens = assembled.context_tokens
     iterations = 0
-    for _iteration in range(deps.config.max_iterations):
-        iterations += 1
+    try:
+        for _iteration in range(deps.config.max_iterations):
+            iterations += 1
+            update_iterations(turn_id, iterations)
 
-        # Per-iteration token re-accumulation (4a carryover fix).
-        total_tokens = assembled.context_tokens + count_messages_tokens(messages)
-        if total_tokens > deps.config.max_total_tokens_per_turn:
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="max_tokens",
-                )
-            )
-            return
-
-        try:
-            ctx.cancel_token.check()
-        except asyncio.CancelledError:
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="cancelled",
-                )
-            )
-            return
-
-        buffered_content = ""
-        tool_calls_from_stream: list[dict] | None = None
-
-        _log.warning(
-            "[agent_loop] iteration=%d msgs=%d total_tokens=%d",
-            iterations, len(messages), total_tokens,
-        )
-
-        try:
-            async for frame in deps.ollama.chat_stream(
-                deps.config.chat_model,
-                messages,
-                options={"temperature": deps.config.temperature, "num_ctx": deps.config.context_window},
-            ):
-                try:
-                    ctx.cancel_token.check()
-                except asyncio.CancelledError:
-                    await emit(
-                        TurnEnd(
-                            turn_id=turn_id,
-                            total_tokens=total_tokens,
-                            iterations=iterations,
-                            stop_reason="cancelled",
-                        )
-                    )
-                    return
-                if frame.get("error"):
-                    _log.warning("[agent_loop] Ollama error frame: %r", frame["error"])
-                    history[:] = history_snapshot
-                    await emit(Error(code="ollama_error", message=str(frame["error"])))
-                    await emit(TurnEnd(
+            # Per-iteration token re-accumulation (4a carryover fix).
+            total_tokens = assembled.context_tokens + count_messages_tokens(messages)
+            if total_tokens > deps.config.max_total_tokens_per_turn:
+                await emit(
+                    TurnEnd(
                         turn_id=turn_id,
                         total_tokens=total_tokens,
                         iterations=iterations,
-                        stop_reason="error",
-                    ))
-                    return
-                message = frame.get("message") or {}
-                content_piece = message.get("content") or ""
-                if content_piece:
-                    buffered_content += content_piece
-                maybe_tool_calls = message.get("tool_calls")
-                if maybe_tool_calls:
-                    tool_calls_from_stream = list(maybe_tool_calls)
-                if frame.get("done"):
-                    _log.warning(
-                        "[agent_loop] stream done — buffered=%d bytes",
-                        len(buffered_content),
+                        stop_reason="max_tokens",
                     )
-                    break
-
-            _log.warning(
-                "[agent_loop] after stream — buffered=%d chars, native_tool_calls=%s",
-                len(buffered_content), bool(tool_calls_from_stream),
-            )
-
-            # Detect tool calls from text output (prompt-based tool calling).
-            # Models that don't support native function calling output a
-            # ```tool_call``` block or raw JSON object in their response.
-            if not tool_calls_from_stream and buffered_content:
-                promoted = _extract_tool_call(buffered_content)
-                _log.warning(
-                    "[agent_loop] _extract_tool_call -> %s (preview: %r)",
-                    "TOOL" if promoted else "text",
-                    buffered_content[:120],
                 )
-                if promoted:
-                    tool_calls_from_stream = promoted
-                    buffered_content = ""
-                else:
-                    # Real text response — stream tokens to client now.
-                    for piece in _rechunk(buffered_content):
-                        await emit(Token(content=piece))
-        except OllamaUnreachable as exc:
-            history[:] = history_snapshot
-            await emit(Error(code="ollama_unreachable", message=str(exc)))
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="error",
-                )
-            )
-            return
-        except OllamaTimeoutError as exc:
-            history[:] = history_snapshot
-            await emit(Error(code="ollama_timeout", message=str(exc)))
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="error",
-                )
-            )
-            return
-        except OllamaRateLimited as exc:
-            history[:] = history_snapshot
-            await emit(Error(code="ollama_rate_limited", message=str(exc)))
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="error",
-                )
-            )
-            return
-        except Exception as exc:
-            history[:] = history_snapshot
-            await emit(Error(code="internal", message=f"{type(exc).__name__}: {exc}"))
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="error",
-                )
-            )
-            return
+                return
 
-        total_tokens += count_tokens(buffered_content)
-
-        if not tool_calls_from_stream:
-            history.append({"role": "assistant", "content": buffered_content})
-            await emit(
-                TurnEnd(
-                    turn_id=turn_id,
-                    total_tokens=total_tokens,
-                    iterations=iterations,
-                    stop_reason="done",
-                )
-            )
-            return
-
-        assistant_msg: dict = {"role": "assistant", "content": buffered_content}
-        assistant_msg["tool_calls"] = tool_calls_from_stream
-        history.append(assistant_msg)
-        messages.append(assistant_msg)
-
-        tool_ctx = ToolContext(
-            project_root=Path(deps.project.root_path),
-            project_id=deps.project.id,
-            turn_id=turn_id,
-            cancel_token=ctx.cancel_token,
-        )
-
-        for call_index, call in enumerate(tool_calls_from_stream):
             try:
                 ctx.cancel_token.check()
             except asyncio.CancelledError:
@@ -370,56 +220,160 @@ async def run_turn(
                     )
                 )
                 return
-            function = call.get("function") or {}
-            name = function.get("name") or ""
-            raw_args = function.get("arguments")
-            try:
-                args_dict = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
-            except (json.JSONDecodeError, ValueError):
-                args_dict = {}
-            tc_id = _new_tool_call_id(iterations, call_index)
 
-            try:
-                tool = deps.tool_registry.get(name)
-            except KeyError:
-                msg = f"unknown tool '{name}'"
-                await emit(
-                    ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=True)
-                )
-                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
-                history.append({"role": "tool", "name": name, "content": f"error: {msg}"})
-                messages.append({"role": "tool", "name": name, "content": f"error: {msg}"})
-                await deps.audit_log.record_tool_call(
-                    tool=name,
-                    user=ctx.username,
-                    turn_id=turn_id,
-                    tool_call_id=tc_id,
-                    args=args_dict,
-                    status="error",
-                    bytes_out=0,
-                    error=msg,
-                    approved=True,
-                    auto_approved=True,
-                )
-                continue
+            buffered_content = ""
+            tool_calls_from_stream: list[dict] | None = None
 
-            auto_approved = tool.risk == "read"
-            await emit(
-                ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=auto_approved)
+            _log.warning(
+                "[agent_loop] iteration=%d msgs=%d total_tokens=%d",
+                iterations, len(messages), total_tokens,
             )
 
-            approved = auto_approved
-            if not auto_approved:
-                await emit(
-                    ApprovalRequest(tool_call_id=tc_id, tool=name, args=args_dict, risk=tool.risk)
+            try:
+                async for frame in deps.ollama.chat_stream(
+                    deps.config.chat_model,
+                    messages,
+                    options={"temperature": deps.config.temperature, "num_ctx": deps.config.context_window},
+                ):
+                    try:
+                        ctx.cancel_token.check()
+                    except asyncio.CancelledError:
+                        await emit(
+                            TurnEnd(
+                                turn_id=turn_id,
+                                total_tokens=total_tokens,
+                                iterations=iterations,
+                                stop_reason="cancelled",
+                            )
+                        )
+                        return
+                    if frame.get("error"):
+                        _log.warning("[agent_loop] Ollama error frame: %r", frame["error"])
+                        history[:] = history_snapshot
+                        await emit(Error(code="ollama_error", message=str(frame["error"])))
+                        await emit(TurnEnd(
+                            turn_id=turn_id,
+                            total_tokens=total_tokens,
+                            iterations=iterations,
+                            stop_reason="error",
+                        ))
+                        return
+                    message = frame.get("message") or {}
+                    content_piece = message.get("content") or ""
+                    if content_piece:
+                        buffered_content += content_piece
+                    maybe_tool_calls = message.get("tool_calls")
+                    if maybe_tool_calls:
+                        tool_calls_from_stream = list(maybe_tool_calls)
+                    if frame.get("done"):
+                        _final_frame = frame
+                        _log.warning(
+                            "[agent_loop] stream done — buffered=%d bytes",
+                            len(buffered_content),
+                        )
+                        break
+
+                _log.warning(
+                    "[agent_loop] after stream — buffered=%d chars, native_tool_calls=%s",
+                    len(buffered_content), bool(tool_calls_from_stream),
                 )
-                loop = asyncio.get_running_loop()
-                future: asyncio.Future[Approval] = loop.create_future()
-                ctx.pending_approvals[tc_id] = future
+
+                # Detect tool calls from text output (prompt-based tool calling).
+                # Models that don't support native function calling output a
+                # ```tool_call``` block or raw JSON object in their response.
+                if not tool_calls_from_stream and buffered_content:
+                    promoted = _extract_tool_call(buffered_content)
+                    _log.warning(
+                        "[agent_loop] _extract_tool_call -> %s (preview: %r)",
+                        "TOOL" if promoted else "text",
+                        buffered_content[:120],
+                    )
+                    if promoted:
+                        tool_calls_from_stream = promoted
+                        buffered_content = ""
+                    else:
+                        # Real text response — stream tokens to client now.
+                        for piece in _rechunk(buffered_content):
+                            await emit(Token(content=piece))
+            except OllamaUnreachable as exc:
+                history[:] = history_snapshot
+                await emit(Error(code="ollama_unreachable", message=str(exc)))
+                await emit(
+                    TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="error",
+                    )
+                )
+                return
+            except OllamaTimeoutError as exc:
+                history[:] = history_snapshot
+                await emit(Error(code="ollama_timeout", message=str(exc)))
+                await emit(
+                    TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="error",
+                    )
+                )
+                return
+            except OllamaRateLimited as exc:
+                history[:] = history_snapshot
+                await emit(Error(code="ollama_rate_limited", message=str(exc)))
+                await emit(
+                    TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="error",
+                    )
+                )
+                return
+            except Exception as exc:
+                history[:] = history_snapshot
+                await emit(Error(code="internal", message=f"{type(exc).__name__}: {exc}"))
+                await emit(
+                    TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="error",
+                    )
+                )
+                return
+
+            total_tokens += count_tokens(buffered_content)
+
+            if not tool_calls_from_stream:
+                history.append({"role": "assistant", "content": buffered_content})
+                await emit(
+                    TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="done",
+                    )
+                )
+                return
+
+            assistant_msg: dict = {"role": "assistant", "content": buffered_content}
+            assistant_msg["tool_calls"] = tool_calls_from_stream
+            history.append(assistant_msg)
+            messages.append(assistant_msg)
+
+            tool_ctx = ToolContext(
+                project_root=Path(deps.project.root_path),
+                project_id=deps.project.id,
+                turn_id=turn_id,
+                cancel_token=ctx.cancel_token,
+            )
+
+            for call_index, call in enumerate(tool_calls_from_stream):
                 try:
-                    decision = await future
+                    ctx.cancel_token.check()
                 except asyncio.CancelledError:
-                    ctx.pending_approvals.pop(tc_id, None)
                     await emit(
                         TurnEnd(
                             turn_id=turn_id,
@@ -429,16 +383,97 @@ async def run_turn(
                         )
                     )
                     return
-                finally:
-                    ctx.pending_approvals.pop(tc_id, None)
+                function = call.get("function") or {}
+                name = function.get("name") or ""
+                raw_args = function.get("arguments")
+                try:
+                    args_dict = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
+                except (json.JSONDecodeError, ValueError):
+                    args_dict = {}
+                tc_id = _new_tool_call_id(iterations, call_index)
 
-                approved = decision.approved
-                if not approved:
-                    reason = decision.reason or "no reason"
-                    msg = f"user rejected: {reason}"
+                try:
+                    tool = deps.tool_registry.get(name)
+                except KeyError:
+                    msg = f"unknown tool '{name}'"
                     await emit(
-                        ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg)
+                        ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=True)
                     )
+                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
+                    history.append({"role": "tool", "name": name, "content": f"error: {msg}"})
+                    messages.append({"role": "tool", "name": name, "content": f"error: {msg}"})
+                    await deps.audit_log.record_tool_call(
+                        tool=name,
+                        user=ctx.username,
+                        turn_id=turn_id,
+                        tool_call_id=tc_id,
+                        args=args_dict,
+                        status="error",
+                        bytes_out=0,
+                        error=msg,
+                        approved=True,
+                        auto_approved=True,
+                    )
+                    continue
+
+                auto_approved = tool.risk == "read"
+                await emit(
+                    ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=auto_approved)
+                )
+
+                approved = auto_approved
+                if not auto_approved:
+                    await emit(
+                        ApprovalRequest(tool_call_id=tc_id, tool=name, args=args_dict, risk=tool.risk)
+                    )
+                    loop = asyncio.get_running_loop()
+                    future: asyncio.Future[Approval] = loop.create_future()
+                    ctx.pending_approvals[tc_id] = future
+                    try:
+                        decision = await future
+                    except asyncio.CancelledError:
+                        ctx.pending_approvals.pop(tc_id, None)
+                        await emit(
+                            TurnEnd(
+                                turn_id=turn_id,
+                                total_tokens=total_tokens,
+                                iterations=iterations,
+                                stop_reason="cancelled",
+                            )
+                        )
+                        return
+                    finally:
+                        ctx.pending_approvals.pop(tc_id, None)
+
+                    approved = decision.approved
+                    if not approved:
+                        reason = decision.reason or "no reason"
+                        msg = f"user rejected: {reason}"
+                        await emit(
+                            ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg)
+                        )
+                        tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
+                        history.append(tool_msg)
+                        messages.append(tool_msg)
+                        await deps.audit_log.record_tool_call(
+                            tool=name,
+                            user=ctx.username,
+                            turn_id=turn_id,
+                            tool_call_id=tc_id,
+                            args=args_dict,
+                            status="error",
+                            bytes_out=0,
+                            error=msg,
+                            approved=False,
+                            auto_approved=False,
+                        )
+                        continue
+
+                try:
+                    parsed = tool.args_schema.model_validate(args_dict)
+                except ValidationError as exc:
+                    msg = f"invalid args: {exc}"
+                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
                     tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                     history.append(tool_msg)
                     messages.append(tool_msg)
@@ -451,88 +486,68 @@ async def run_turn(
                         status="error",
                         bytes_out=0,
                         error=msg,
-                        approved=False,
-                        auto_approved=False,
+                        approved=approved,
+                        auto_approved=auto_approved,
                     )
                     continue
 
-            try:
-                parsed = tool.args_schema.model_validate(args_dict)
-            except ValidationError as exc:
-                msg = f"invalid args: {exc}"
-                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
-                tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
+                try:
+                    result = await tool.execute(parsed, tool_ctx)
+                except Exception as exc:
+                    msg = f"{type(exc).__name__}: {exc}"
+                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
+                    tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
+                    history.append(tool_msg)
+                    messages.append(tool_msg)
+                    await deps.audit_log.record_tool_call(
+                        tool=name,
+                        user=ctx.username,
+                        turn_id=turn_id,
+                        tool_call_id=tc_id,
+                        args=args_dict,
+                        status="error",
+                        bytes_out=0,
+                        error=msg,
+                        approved=approved,
+                        auto_approved=auto_approved,
+                    )
+                    continue
+
+                await emit(
+                    ToolResult(
+                        tool_call_id=tc_id,
+                        status=result.status,
+                        bytes_out=result.bytes_out,
+                        error=result.error,
+                    )
+                )
+                tool_msg = {"role": "tool", "name": name, "content": result.text}
                 history.append(tool_msg)
                 messages.append(tool_msg)
+                total_tokens += count_tokens(result.text)
                 await deps.audit_log.record_tool_call(
                     tool=name,
                     user=ctx.username,
                     turn_id=turn_id,
                     tool_call_id=tc_id,
                     args=args_dict,
-                    status="error",
-                    bytes_out=0,
-                    error=msg,
-                    approved=approved,
-                    auto_approved=auto_approved,
-                )
-                continue
-
-            try:
-                result = await tool.execute(parsed, tool_ctx)
-            except Exception as exc:
-                msg = f"{type(exc).__name__}: {exc}"
-                await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
-                tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
-                history.append(tool_msg)
-                messages.append(tool_msg)
-                await deps.audit_log.record_tool_call(
-                    tool=name,
-                    user=ctx.username,
-                    turn_id=turn_id,
-                    tool_call_id=tc_id,
-                    args=args_dict,
-                    status="error",
-                    bytes_out=0,
-                    error=msg,
-                    approved=approved,
-                    auto_approved=auto_approved,
-                )
-                continue
-
-            await emit(
-                ToolResult(
-                    tool_call_id=tc_id,
                     status=result.status,
                     bytes_out=result.bytes_out,
                     error=result.error,
+                    approved=approved,
+                    auto_approved=auto_approved,
                 )
-            )
-            tool_msg = {"role": "tool", "name": name, "content": result.text}
-            history.append(tool_msg)
-            messages.append(tool_msg)
-            total_tokens += count_tokens(result.text)
-            await deps.audit_log.record_tool_call(
-                tool=name,
-                user=ctx.username,
-                turn_id=turn_id,
-                tool_call_id=tc_id,
-                args=args_dict,
-                status=result.status,
-                bytes_out=result.bytes_out,
-                error=result.error,
-                approved=approved,
-                auto_approved=auto_approved,
-            )
 
-    await emit(
-        TurnEnd(
-            turn_id=turn_id,
-            total_tokens=total_tokens,
-            iterations=iterations,
-            stop_reason="max_iter",
+        await emit(
+            TurnEnd(
+                turn_id=turn_id,
+                total_tokens=total_tokens,
+                iterations=iterations,
+                stop_reason="max_iter",
+            )
         )
-    )
+    finally:
+        clear_active(turn_id)
 
 
 async def _resolve_repo_map(deps: TurnDeps) -> str:
