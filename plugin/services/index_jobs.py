@@ -68,7 +68,9 @@ class IndexJobTracker:
             started_at=_now_iso(),
         )
         self._jobs[job.id] = job
-        self._tasks[job.id] = asyncio.create_task(self._run(job, worker))
+        task = asyncio.create_task(self._run(job, worker))
+        task.add_done_callback(lambda _: self._tasks.pop(job.id, None))
+        self._tasks[job.id] = task
         return job
 
     async def _run(
@@ -95,7 +97,7 @@ class IndexJobTracker:
         """Cancel done asyncio tasks and cap finished-job history."""
         done_task_ids = [jid for jid, t in self._tasks.items() if t.done()]
         for jid in done_task_ids:
-            del self._tasks[jid]
+            self._tasks.pop(jid, None)
         finished = [jid for jid, j in self._jobs.items() if j.status not in _LIVE]
         for jid in finished[:-_MAX_FINISHED_JOBS]:
             self._jobs.pop(jid)

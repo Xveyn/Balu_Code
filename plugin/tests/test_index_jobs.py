@@ -126,6 +126,7 @@ async def test_completed_jobs_purged_when_limit_exceeded(tracker):
             first_id = j.id
         await _wait_for_status(tracker, j.id, JobStatus.DONE)
 
+    await asyncio.sleep(0)  # let done callbacks fire before checking _tasks
     assert len(tracker._jobs) <= _MAX_FINISHED_JOBS
     assert tracker.get_job(first_id) is None  # oldest entry evicted
     assert len(tracker._tasks) == 0  # completed asyncio tasks cleaned up
