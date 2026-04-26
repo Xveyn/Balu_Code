@@ -16,7 +16,7 @@ from pathlib import Path
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.schemas.user import UserPublic
-from app.services import auth_service
+from app.services import auth as auth_service
 from app.services import users as user_service
 from balu_code_shared.events import Approval, Cancel, Error, UserMessage, parse_frame
 from fastapi import APIRouter, Depends, HTTPException, Query, status
