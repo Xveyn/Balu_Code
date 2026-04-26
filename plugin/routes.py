@@ -14,7 +14,10 @@ import uuid
 from pathlib import Path
 
 from app.api.deps import get_current_user
+from app.core.database import get_db
 from app.schemas.user import UserPublic
+from app.services import auth_service
+from app.services import users as user_service
 from balu_code_shared.events import Approval, Cancel, Error, UserMessage, parse_frame
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
@@ -71,6 +74,43 @@ from .services.tools import ToolRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
+
+
+async def _ws_auth(websocket: WebSocket) -> UserPublic:
+    """Extract and validate Bearer token from a WebSocket connection.
+
+    OAuth2PasswordBearer only works with HTTP Request objects, not WebSockets,
+    so we replicate the token extraction and validation logic manually.
+    """
+    from app.services.api_key_service import ApiKeyService
+
+    auth_header = websocket.headers.get("authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        await websocket.close(code=1008, reason="missing auth token")
+        raise WebSocketDisconnect(code=1008)
+
+    db = next(get_db())
+    try:
+        if token.startswith("balu_"):
+            api_key = ApiKeyService.validate_api_key(db, token)
+            if not api_key:
+                await websocket.close(code=1008, reason="invalid api key")
+                raise WebSocketDisconnect(code=1008)
+            u = user_service.get_user(api_key.target_user_id, db=db)
+            if not u or not u.is_active:
+                await websocket.close(code=1008, reason="user inactive")
+                raise WebSocketDisconnect(code=1008)
+            return user_service.serialize_user(u)
+        else:
+            payload = auth_service.decode_token(token)
+            u = user_service.get_user(payload.sub, db=db)
+            if not u or not u.is_active:
+                await websocket.close(code=1008, reason="user inactive")
+                raise WebSocketDisconnect(code=1008)
+            return user_service.serialize_user(u)
+    finally:
+        db.close()
 
 
 def build_router() -> APIRouter:
@@ -323,7 +363,6 @@ def build_router() -> APIRouter:
     async def chat_socket(
         websocket: WebSocket,
         project_id: int,
-        user: UserPublic = Depends(get_current_user),
         store: ProjectStore = Depends(get_project_store),
         ollama: OllamaClient = Depends(get_ollama_client),
         rag_registry: RagRegistry = Depends(get_rag_registry),
@@ -331,6 +370,11 @@ def build_router() -> APIRouter:
         config: BaluCodePluginConfig = Depends(get_plugin_config),
         audit_log=Depends(get_audit_log),
     ) -> None:
+        try:
+            await _ws_auth(websocket)
+        except WebSocketDisconnect:
+            return
+
         try:
             project = await asyncio.to_thread(store.get_project, project_id)
         except ProjectNotFoundError:
