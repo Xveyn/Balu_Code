@@ -32,5 +32,8 @@
     "unidiff>=0.7"
   ],
   "entrypoint": "__init__.py",
-  "ui": { "bundle": "ui/bundle.js", "styles": null }
+  "ui": {
+    "bundle": "ui/bundle.js",
+    "styles": null
+  }
 }
