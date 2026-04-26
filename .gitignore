@@ -20,6 +20,9 @@ build/
 venv/
 env/
 
+# Git worktrees
+.worktrees/
+
 # Editor / tool state
 .vscode/
 .idea/
