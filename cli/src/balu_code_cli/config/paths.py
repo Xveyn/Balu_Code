@@ -24,4 +24,13 @@ def permissions_yaml() -> Path:
     return config_dir() / "permissions.yaml"
 
 
-__all__ = ["config_dir", "config_yaml", "credentials_yaml", "permissions_yaml"]
+def sessions_dir(server_url: str, project_id: int) -> Path:
+    import hashlib
+    key = f"{server_url}:{project_id}".encode()
+    h = hashlib.sha1(key, usedforsecurity=False).hexdigest()[:16]
+    xdg = os.environ.get("XDG_DATA_HOME") or None
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "balu-code" / "sessions" / h
+
+
+__all__ = ["config_dir", "config_yaml", "credentials_yaml", "permissions_yaml", "sessions_dir"]
