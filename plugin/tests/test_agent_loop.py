@@ -482,3 +482,114 @@ class TestPerIterationTokenReAccumulation:
         end = next(e for e in events if isinstance(e, TurnEnd))
         # After a tool call the messages list grew, so total_tokens > initial context_tokens
         assert end.total_tokens >= start.context_tokens
+
+
+class TestCancelToken:
+    @pytest.mark.asyncio
+    async def test_cancel_between_iterations_ends_turn(self, deps_factory):
+        ctx = _make_ctx()
+        events: list = []
+
+        async def emit(e):
+            events.append(e)
+            if isinstance(e, ToolResult):
+                # Cancel right after the first tool result — next iteration check fires
+                ctx.cancel_token.cancel()
+
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {"function": {"name": "glob", "arguments": {"pattern": "*.py"}}}
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+                # second stream should never be reached
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
+
+        await run_turn("x", [], deps, emit, ctx)
+
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_ollama_stream_stops_streaming(self, deps_factory):
+        ctx = _make_ctx()
+        events: list = []
+
+        async def emit(e):
+            events.append(e)
+            if e.type == "token":
+                # Cancel after first token — next frame's cancel check should fire
+                ctx.cancel_token.cancel()
+
+        deps = deps_factory(
+            [
+                [
+                    {"message": {"content": "chunk1", "tool_calls": None}, "done": False},
+                    {"message": {"content": "chunk2", "tool_calls": None}, "done": False},
+                    {"message": {"content": "chunk3", "tool_calls": None}, "done": True},
+                ]
+            ]
+        )
+
+        await run_turn("x", [], deps, emit, ctx)
+
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "cancelled"
+        # Only the first token should have reached emit
+        tokens = [e for e in events if e.type == "token"]
+        assert len(tokens) == 1
+
+    @pytest.mark.asyncio
+    async def test_cancel_while_awaiting_approval_ends_turn(self, deps_factory):
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "write_file",
+                                        "arguments": {"path": "x.txt", "content": "hi"},
+                                    }
+                                }
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+            ]
+        )
+        deps = replace(deps, tool_registry=_registry_with_write())
+
+        ctx = _make_ctx()
+        events: list = []
+
+        async def emit(e):
+            events.append(e)
+
+        async def canceller():
+            # Wait until we see ApprovalRequest, then cancel
+            while not any(isinstance(e, ApprovalRequest) for e in events):
+                await asyncio.sleep(0.01)
+            ctx.cancel_token.cancel()
+            for fut in list(ctx.pending_approvals.values()):
+                if not fut.done():
+                    fut.cancel()
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(canceller())
+            tg.create_task(run_turn("write", [], deps, emit, ctx))
+
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "cancelled"

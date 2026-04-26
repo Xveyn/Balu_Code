@@ -153,6 +153,12 @@ async def run_turn(
             )
             return
 
+        try:
+            ctx.cancel_token.check()
+        except asyncio.CancelledError:
+            await emit(TurnEnd(turn_id=turn_id, total_tokens=total_tokens, iterations=iterations, stop_reason="cancelled"))
+            return
+
         buffered_content = ""
         tool_calls_from_stream: list[dict] | None = None
 
@@ -163,6 +169,11 @@ async def run_turn(
                 tools=deps.tool_registry.ollama_schemas(),
                 options={"temperature": deps.config.temperature},
             ):
+                try:
+                    ctx.cancel_token.check()
+                except asyncio.CancelledError:
+                    await emit(TurnEnd(turn_id=turn_id, total_tokens=total_tokens, iterations=iterations, stop_reason="cancelled"))
+                    return
                 message = frame.get("message") or {}
                 content_piece = message.get("content") or ""
                 if content_piece:
@@ -214,6 +225,11 @@ async def run_turn(
         )
 
         for call_index, call in enumerate(tool_calls_from_stream):
+            try:
+                ctx.cancel_token.check()
+            except asyncio.CancelledError:
+                await emit(TurnEnd(turn_id=turn_id, total_tokens=total_tokens, iterations=iterations, stop_reason="cancelled"))
+                return
             function = call.get("function") or {}
             name = function.get("name") or ""
             raw_args = function.get("arguments")
@@ -249,6 +265,10 @@ async def run_turn(
                 ctx.pending_approvals[tc_id] = future
                 try:
                     decision = await future
+                except asyncio.CancelledError:
+                    ctx.pending_approvals.pop(tc_id, None)
+                    await emit(TurnEnd(turn_id=turn_id, total_tokens=total_tokens, iterations=iterations, stop_reason="cancelled"))
+                    return
                 finally:
                     ctx.pending_approvals.pop(tc_id, None)
 
