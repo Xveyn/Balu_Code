@@ -128,7 +128,8 @@ async def _dispatch_turn(
             return turn_id
 
         elif event.type == "error":
-            console.print(f"[red]Error [{event.code}]: {event.message}[/red]")
+            from rich.markup import escape
+            console.print(f"[red]Error [[{event.code}]]: {escape(str(event.message))}[/red]")
 
 
 async def run_chat(

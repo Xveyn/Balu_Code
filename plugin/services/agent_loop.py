@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable
+
+_log = logging.getLogger(__name__)
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -209,6 +212,11 @@ async def run_turn(
         buffered_content = ""
         tool_calls_from_stream: list[dict] | None = None
 
+        _log.warning(
+            "[agent_loop] iteration=%d msgs=%d total_tokens=%d",
+            iterations, len(messages), total_tokens,
+        )
+
         try:
             async for frame in deps.ollama.chat_stream(
                 deps.config.chat_model,
@@ -227,6 +235,17 @@ async def run_turn(
                         )
                     )
                     return
+                if frame.get("error"):
+                    _log.warning("[agent_loop] Ollama error frame: %r", frame["error"])
+                    history[:] = history_snapshot
+                    await emit(Error(code="ollama_error", message=str(frame["error"])))
+                    await emit(TurnEnd(
+                        turn_id=turn_id,
+                        total_tokens=total_tokens,
+                        iterations=iterations,
+                        stop_reason="error",
+                    ))
+                    return
                 message = frame.get("message") or {}
                 content_piece = message.get("content") or ""
                 if content_piece:
@@ -235,13 +254,27 @@ async def run_turn(
                 if maybe_tool_calls:
                     tool_calls_from_stream = list(maybe_tool_calls)
                 if frame.get("done"):
+                    _log.warning(
+                        "[agent_loop] stream done — buffered=%d bytes",
+                        len(buffered_content),
+                    )
                     break
+
+            _log.warning(
+                "[agent_loop] after stream — buffered=%d chars, native_tool_calls=%s",
+                len(buffered_content), bool(tool_calls_from_stream),
+            )
 
             # Detect tool calls from text output (prompt-based tool calling).
             # Models that don't support native function calling output a
             # ```tool_call``` block or raw JSON object in their response.
             if not tool_calls_from_stream and buffered_content:
                 promoted = _extract_tool_call(buffered_content)
+                _log.warning(
+                    "[agent_loop] _extract_tool_call -> %s (preview: %r)",
+                    "TOOL" if promoted else "text",
+                    buffered_content[:120],
+                )
                 if promoted:
                     tool_calls_from_stream = promoted
                     buffered_content = ""

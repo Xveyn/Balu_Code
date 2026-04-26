@@ -16,7 +16,7 @@ class BaluCodePluginConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ollama_base_url: str = "http://127.0.0.1:11434"
-    chat_model: str = "qwen2.5-coder:14b-instruct-q4_K_M"
+    chat_model: str = "qwen2.5-coder:14b"
     embed_model: str = "nomic-embed-text"
 
     # Phase 4a agent-loop knobs
