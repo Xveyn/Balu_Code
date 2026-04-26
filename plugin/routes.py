@@ -37,7 +37,10 @@ from plugin.schemas import (
     ProjectsResponse,
     RepoMapResponse,
 )
-from plugin.services.agent_loop import TurnDeps, run_turn
+import uuid
+
+from plugin.services.agent_loop import TurnContext, TurnDeps, run_turn
+from plugin.services.cancel import CancelToken
 from plugin.services.index_jobs import (
     AlreadyIndexingError,
     IndexJob,
@@ -336,7 +339,13 @@ def build_router() -> APIRouter:
                     await _emit(Error(code="bad_frame", message=str(exc)[:200]))
                     continue
                 if isinstance(frame, UserMessage):
-                    await run_turn(frame.content, history, deps, _emit)
+                    turn_ctx = TurnContext(
+                        turn_id=f"t_{uuid.uuid4().hex[:12]}",
+                        cancel_token=CancelToken(),
+                        pending_approvals={},
+                        username=_user.username,
+                    )
+                    await run_turn(frame.content, history, deps, _emit, turn_ctx)
                 else:
                     await _emit(
                         Error(

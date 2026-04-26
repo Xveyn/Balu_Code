@@ -101,7 +101,7 @@ async def test_simple_turn_done_without_tool_calls(deps_factory):
         ]
     )
     history: list[dict] = []
-    await run_turn("hi", history, deps, emit)
+    await run_turn("hi", history, deps, emit, _make_ctx())
 
     types = [e.type for e in events]
     assert types[0] == "turn_start"
@@ -141,7 +141,7 @@ async def test_tool_call_dispatches_read_file(deps_factory):
         ]
     )
     history: list[dict] = []
-    await run_turn("what is in a.py?", history, deps, emit)
+    await run_turn("what is in a.py?", history, deps, emit, _make_ctx())
 
     tool_calls = [e for e in events if isinstance(e, ToolCall)]
     tool_results = [e for e in events if isinstance(e, ToolResult)]
@@ -171,7 +171,7 @@ async def test_iteration_cap_yields_max_iter_stop_reason(deps_factory):
         events.append(e)
 
     history: list[dict] = []
-    await run_turn("loop forever", history, deps, emit)
+    await run_turn("loop forever", history, deps, emit, _make_ctx())
     end = next(e for e in events if isinstance(e, TurnEnd))
     assert end.stop_reason == "max_iter"
 
@@ -196,7 +196,7 @@ async def test_ollama_error_surfaces_as_error_event(deps_factory):
 
     deps = replace(deps_fresh, ollama=_BrokenOllama())
     history: list[dict] = []
-    await run_turn("hi", history, deps, emit)
+    await run_turn("hi", history, deps, emit, _make_ctx())
     errors = [e for e in events if isinstance(e, Error)]
     assert len(errors) == 1
     assert errors[0].code == "ollama_unreachable"
@@ -227,7 +227,258 @@ async def test_unknown_tool_name_emits_error_tool_result(deps_factory):
         ]
     )
     history: list[dict] = []
-    await run_turn("use a tool", history, deps, emit)
+    await run_turn("use a tool", history, deps, emit, _make_ctx())
     tool_results = [e for e in events if isinstance(e, ToolResult)]
     assert len(tool_results) == 1
     assert tool_results[0].status == "error"
+
+
+# ── Task 10 additions ─────────────────────────────────────────────────────────
+
+import asyncio
+
+from balu_code_shared.events import Approval, ApprovalRequest
+
+from plugin.services.agent_loop import TurnContext
+from plugin.services.cancel import CancelToken
+
+
+class _TrackingAuditLogger:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def record_tool_call(self, **kw) -> None:
+        self.calls.append(kw)
+
+
+@pytest.fixture
+def fake_audit():
+    return _TrackingAuditLogger()
+
+
+def _make_ctx(turn_id: str = "t_1", username: str = "sven") -> TurnContext:
+    return TurnContext(
+        turn_id=turn_id,
+        cancel_token=CancelToken(),
+        pending_approvals={},
+        username=username,
+    )
+
+
+def _registry_with_write():
+    from plugin.services.tools.write_file import WriteFileTool
+
+    reg = default_registry()
+    reg.register(WriteFileTool())
+    return reg
+
+
+class TestApprovalGateAndAudit:
+    @pytest.mark.asyncio
+    async def test_write_tool_emits_approval_request_and_awaits(
+        self, deps_factory, tmp_project
+    ):
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "write_file",
+                                        "arguments": {"path": "out.txt", "content": "hi"},
+                                    }
+                                }
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
+        deps = replace(deps, tool_registry=_registry_with_write())
+
+        events: list = []
+        ctx = _make_ctx()
+
+        async def emit(e):
+            events.append(e)
+
+        async def approver():
+            # wait until ApprovalRequest is emitted
+            while not any(isinstance(e, ApprovalRequest) for e in events):
+                await asyncio.sleep(0.01)
+            req = next(e for e in events if isinstance(e, ApprovalRequest))
+            fut = ctx.pending_approvals.get(req.tool_call_id)
+            if fut and not fut.done():
+                fut.set_result(
+                    Approval(tool_call_id=req.tool_call_id, approved=True, reason=None)
+                )
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(approver())
+            tg.create_task(run_turn("write a file", [], deps, emit, ctx))
+
+        types = [e.type for e in events]
+        assert "turn_start" in types
+        assert "tool_call" in types
+        assert "approval_request" in types
+        assert "tool_result" in types
+        assert types[-1] == "turn_end"
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "done"
+        tool_call_ev = next(e for e in events if isinstance(e, ToolCall))
+        assert tool_call_ev.auto_approved is False
+        tool_result_ev = next(e for e in events if isinstance(e, ToolResult))
+        assert tool_result_ev.status == "ok"
+
+    @pytest.mark.asyncio
+    async def test_rejected_approval_feeds_error_back(self, deps_factory):
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "write_file",
+                                        "arguments": {"path": "out.txt", "content": "hi"},
+                                    }
+                                }
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+                [{"message": {"content": "ok", "tool_calls": None}, "done": True}],
+            ]
+        )
+        deps = replace(deps, tool_registry=_registry_with_write())
+
+        events: list = []
+        ctx = _make_ctx()
+
+        async def emit(e):
+            events.append(e)
+
+        async def rejecter():
+            while not any(isinstance(e, ApprovalRequest) for e in events):
+                await asyncio.sleep(0.01)
+            req = next(e for e in events if isinstance(e, ApprovalRequest))
+            fut = ctx.pending_approvals.get(req.tool_call_id)
+            if fut and not fut.done():
+                fut.set_result(
+                    Approval(
+                        tool_call_id=req.tool_call_id, approved=False, reason="no"
+                    )
+                )
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(rejecter())
+            tg.create_task(run_turn("write file", [], deps, emit, ctx))
+
+        tool_result_ev = next(e for e in events if isinstance(e, ToolResult))
+        assert tool_result_ev.status == "error"
+        assert "user rejected: no" in (tool_result_ev.error or "")
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "done"
+
+    @pytest.mark.asyncio
+    async def test_audit_logger_called_for_every_tool_result(
+        self, deps_factory, fake_audit
+    ):
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {"function": {"name": "glob", "arguments": {"pattern": "*.py"}}},
+                                {"function": {"name": "read_file", "arguments": {"path": "a.py"}}},
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
+        deps = replace(deps, audit_log=fake_audit)
+
+        events: list = []
+        ctx = _make_ctx()
+
+        async def emit(e):
+            events.append(e)
+
+        history: list[dict] = []
+        await run_turn("list and read", history, deps, emit, ctx)
+
+        assert len(fake_audit.calls) == 2
+        tools = {c["tool"] for c in fake_audit.calls}
+        assert "glob" in tools
+        assert "read_file" in tools
+
+
+class TestStopReasonMaxTokens:
+    @pytest.mark.asyncio
+    async def test_token_cap_trip_uses_max_tokens_reason(self, deps_factory):
+        deps = deps_factory(
+            [
+                [{"message": {"content": "long reply", "tool_calls": None}, "done": True}]
+            ]
+        )
+        deps.config.max_total_tokens_per_turn = 1  # cap lower than any context
+
+        events: list = []
+
+        async def emit(e):
+            events.append(e)
+
+        ctx = _make_ctx()
+        await run_turn("hi", [], deps, emit, ctx)
+
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        assert end.stop_reason == "max_tokens"
+
+
+class TestPerIterationTokenReAccumulation:
+    @pytest.mark.asyncio
+    async def test_messages_tokens_counted_each_iteration(self, deps_factory):
+        deps = deps_factory(
+            [
+                [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {"function": {"name": "glob", "arguments": {"pattern": "*.py"}}}
+                            ],
+                        },
+                        "done": True,
+                    }
+                ],
+                [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+            ]
+        )
+
+        events: list = []
+
+        async def emit(e):
+            events.append(e)
+
+        ctx = _make_ctx()
+        await run_turn("list files", [], deps, emit, ctx)
+
+        from balu_code_shared.events import TurnStart
+
+        start = next(e for e in events if isinstance(e, TurnStart))
+        end = next(e for e in events if isinstance(e, TurnEnd))
+        # After a tool call the messages list grew, so total_tokens > initial context_tokens
+        assert end.total_tokens >= start.context_tokens
