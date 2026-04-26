@@ -1,10 +1,6 @@
 """Tests for config/permissions.py."""
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from balu_code_cli.config.permissions import (
     PermissionsStore,
     load_permissions,
