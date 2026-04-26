@@ -1,14 +1,11 @@
-"""Typer entry point for `balu-code`.
-
-Phase 1 only registers the top-level ``--version`` callback. Real
-subcommands (auth, init, chat, …) land in later phases.
-"""
+"""Typer entry point for `balu-code`."""
 
 from __future__ import annotations
 
 import typer
 
 from balu_code_cli import __version__
+from balu_code_cli.commands.auth import app as auth_app
 
 app = typer.Typer(
     name="balu-code",
@@ -16,6 +13,7 @@ app = typer.Typer(
     add_completion=False,
     help="Balu Code — self-hosted coding agent.",
 )
+app.add_typer(auth_app, name="auth")
 
 
 def _version_callback(value: bool) -> None:
@@ -27,11 +25,8 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def main(
     version: bool = typer.Option(
-        False,
-        "--version",
-        "-V",
-        callback=_version_callback,
-        is_eager=True,
+        False, "--version", "-V",
+        callback=_version_callback, is_eager=True,
         help="Show version and exit.",
     ),
 ) -> None:
