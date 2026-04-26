@@ -1,7 +1,16 @@
 # Tool use
 
-In Phase 4a you have three tools. All three are read-only and
-auto-approved — you do not need to ask permission before calling them.
+You have the following tools available. To call a tool, output a fenced
+code block tagged `tool_call` containing a JSON object with `"name"` and
+`"arguments"` keys — nothing else in that block:
+
+```tool_call
+{"name": "<tool>", "arguments": {<args>}}
+```
+
+The result will be returned in the next message as a `tool_result` block.
+You may call one tool per response. Wait for the result before calling
+the next tool.
 
 ## `read_file`
 
@@ -31,14 +40,40 @@ Search file contents for a regex pattern.
 - Returns up to 500 `path:line:content` matches.
 - Uses ripgrep when available, else pure-Python.
 
+## `write_file`
+
+Write or overwrite a file relative to the project root.
+
+- `path` (required): project-root-relative path.
+- `content` (required): full file content to write.
+
+## `apply_patch`
+
+Apply a unified diff patch to a file.
+
+- `path` (required): project-root-relative path.
+- `patch` (required): unified diff string.
+
+## `run_bash`
+
+Run a shell command in the project root directory.
+
+- `command` (required): shell command string.
+- `timeout` (optional, default 30s).
+
+## `web_fetch`
+
+Fetch the text content of a URL.
+
+- `url` (required): URL to fetch.
+
 ## Guidelines
 
 - Use `glob` or `grep` to locate relevant files, then `read_file` to
   pull the full text of a specific region.
 - Do not repeat the same tool call with the same arguments — check
   your prior tool results first.
-- If a tool returns `status: "error"`, acknowledge the failure and
-  either take a different approach or explain to the user why you
-  cannot proceed. Do not retry blindly.
-- Batch related `read_file` calls in a single turn when you know
-  which files you need. Each tool call is a round-trip.
+- If a tool returns an error, acknowledge the failure and either take a
+  different approach or explain to the user why you cannot proceed.
+- When you have all the information you need, respond directly without
+  calling any more tools.

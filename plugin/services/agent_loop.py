@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,21 +85,37 @@ def _new_tool_call_id(iteration: int, suffix: int) -> str:
     return f"tc_{iteration}_{suffix}"
 
 
-def _try_parse_inline_tool_call(content: str) -> list[dict] | None:
-    """Detect tool calls serialized as JSON in content (qwen2.5-coder style).
+_TOOL_CALL_RE = re.compile(
+    r"```tool_call\s*\n(.*?)\n```",
+    re.DOTALL,
+)
 
-    Returns a list in Ollama tool_calls format if the content is a JSON object
-    with "name" and "arguments" keys, otherwise None.
+
+def _extract_tool_call(content: str) -> list[dict] | None:
+    """Extract a ```tool_call ... ``` block from model output.
+
+    Also handles models that return raw JSON objects (qwen2.5-coder style).
+    Returns a list in Ollama tool_calls format, or None.
     """
+    m = _TOOL_CALL_RE.search(content)
+    if m:
+        try:
+            obj = json.loads(m.group(1).strip())
+            if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
+                return [{"function": {"name": obj["name"], "arguments": obj["arguments"]}}]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Fallback: bare JSON object covering the whole content
     stripped = content.strip()
-    if not (stripped.startswith("{") and stripped.endswith("}")):
-        return None
-    try:
-        obj = json.loads(stripped)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
-        return [{"function": {"name": obj["name"], "arguments": obj["arguments"]}}]
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            obj = json.loads(stripped)
+            if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
+                return [{"function": {"name": obj["name"], "arguments": obj["arguments"]}}]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
     return None
 
 
@@ -196,7 +213,6 @@ async def run_turn(
             async for frame in deps.ollama.chat_stream(
                 deps.config.chat_model,
                 messages,
-                tools=deps.tool_registry.ollama_schemas(),
                 options={"temperature": deps.config.temperature},
             ):
                 try:
@@ -221,11 +237,11 @@ async def run_turn(
                 if frame.get("done"):
                     break
 
-            # Some models (e.g. qwen2.5-coder) serialize tool calls as a JSON
-            # object in message.content instead of using message.tool_calls.
-            # Detect and promote that pattern so the tool execution path fires.
+            # Detect tool calls from text output (prompt-based tool calling).
+            # Models that don't support native function calling output a
+            # ```tool_call``` block or raw JSON object in their response.
             if not tool_calls_from_stream and buffered_content:
-                promoted = _try_parse_inline_tool_call(buffered_content)
+                promoted = _extract_tool_call(buffered_content)
                 if promoted:
                     tool_calls_from_stream = promoted
                     buffered_content = ""
