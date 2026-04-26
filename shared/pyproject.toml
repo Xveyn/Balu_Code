@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+dev = ["pytest>=8.0", "ruff==0.6.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/balu_code_shared"]

@@ -46,7 +46,6 @@ class SessionReader:
         lines = self._lines()
         start_ts = lines[0]["ts"] if lines else None
         turn_count = sum(
-            1 for e in lines
-            if e["direction"] == "in" and e["payload"].get("type") == "turn_end"
+            1 for e in lines if e["direction"] == "in" and e["payload"].get("type") == "turn_end"
         )
         return {"start_ts": start_ts, "turn_count": turn_count}

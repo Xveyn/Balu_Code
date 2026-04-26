@@ -16,12 +16,14 @@ class _FakeOllama:
 
 
 @pytest.fixture
-def registry(tmp_path) -> RagRegistry:
-    return RagRegistry(
+async def registry(tmp_path) -> RagRegistry:
+    reg = RagRegistry(
         data_dir=tmp_path,
         embed_model="nomic-embed-text",
         ollama=_FakeOllama(),
     )
+    yield reg
+    await reg.close_all()
 
 
 async def test_get_opens_index_on_first_call(registry, tmp_path):

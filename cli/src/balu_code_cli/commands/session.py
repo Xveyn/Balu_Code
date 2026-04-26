@@ -93,13 +93,15 @@ def session_resume(
         raise typer.Exit(1)
 
     api_key = creds.servers[balucode.server_url].api_key
-    asyncio.run(run_chat(
-        balucode=balucode,
-        api_key=api_key,
-        yolo=False,
-        project_id=balucode.project_id,
-        initial_messages=initial_messages,
-    ))
+    asyncio.run(
+        run_chat(
+            balucode=balucode,
+            api_key=api_key,
+            yolo=False,
+            project_id=balucode.project_id,
+            initial_messages=initial_messages,
+        )
+    )
 
 
 @app.command("delete")

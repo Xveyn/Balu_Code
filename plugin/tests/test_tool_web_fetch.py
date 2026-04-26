@@ -1,4 +1,5 @@
 """Tests for web_fetch tool — offline fixtures via httpx.MockTransport."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,6 +59,7 @@ async def test_non_html_returned_raw(ctx: ToolContext) -> None:
 @pytest.mark.asyncio
 async def test_max_bytes_truncates(ctx: ToolContext) -> None:
     big_text = "x" * 2000
+
     def handler(request):
         return httpx.Response(200, text=big_text, headers={"content-type": "text/plain"})
 

@@ -30,7 +30,9 @@ def login() -> None:
     try:
         BaluCodeHttpClient(server_url, api_key).health()
     except httpx.HTTPStatusError as exc:
-        console.print(f"[red]Authentication failed (HTTP {exc.response.status_code}). Check your API key.[/red]")
+        console.print(
+            f"[red]Authentication failed (HTTP {exc.response.status_code}). Check your API key.[/red]"
+        )
         raise typer.Exit(1) from None
     except Exception as exc:
         console.print(f"[red]Could not reach server: {exc}[/red]")

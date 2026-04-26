@@ -6,8 +6,9 @@ Mirrors only the surface area balu_code imports. Keep in sync with
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,11 +19,27 @@ class PluginMetadata(BaseModel):
     display_name: str
     description: str
     author: str
-    required_permissions: List[str] = Field(default_factory=list)
+    required_permissions: list[str] = Field(default_factory=list)
     category: str = "general"
-    homepage: Optional[str] = None
-    min_baluhost_version: Optional[str] = None
-    dependencies: List[str] = Field(default_factory=list)
+    homepage: str | None = None
+    min_baluhost_version: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class PluginNavItem(BaseModel):
+    path: str
+    label: str
+    icon: str = "plug"
+    admin_only: bool = False
+    order: int = 100
+
+
+class PluginUIManifest(BaseModel):
+    enabled: bool = True
+    nav_items: list[PluginNavItem] = Field(default_factory=list)
+    bundle_path: str = "ui/bundle.js"
+    styles_path: str | None = None
+    dashboard_widgets: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -48,11 +65,11 @@ class PluginBase(ABC):
     async def on_shutdown(self) -> None:
         return None
 
-    def get_background_tasks(self) -> List[BackgroundTaskSpec]:
+    def get_background_tasks(self) -> list[BackgroundTaskSpec]:
         return []
 
-    def get_config_schema(self) -> Optional[type]:
+    def get_config_schema(self) -> type | None:
         return None
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {}

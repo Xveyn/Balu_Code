@@ -70,6 +70,43 @@ class AuditLogger:
             error_message=error,
         )
 
+    async def query_recent_tool_calls(self, limit: int = 100) -> list[dict]:
+        return await asyncio.to_thread(self._query_sync, limit)
+
+    def _query_sync(self, limit: int) -> list[dict]:
+        import json as _json
+
+        from app.core.database import SessionLocal
+        from app.models.audit_log import AuditLog as DBLog
+
+        with SessionLocal() as db:
+            if db is None:
+                return []
+            rows = (
+                db.query(DBLog)
+                .filter(DBLog.event_type == "BALU_CODE")
+                .order_by(DBLog.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            result = []
+            for r in rows:
+                details = _json.loads(r.details) if r.details else {}
+                result.append(
+                    {
+                        "id": r.id,
+                        "timestamp": r.timestamp.isoformat(),
+                        "user": r.user,
+                        "action": r.action,
+                        "resource": r.resource,
+                        "success": r.success,
+                        "error_message": r.error_message,
+                        "turn_id": details.get("turn_id"),
+                        "tool_call_id": details.get("tool_call_id"),
+                    }
+                )
+            return result
+
 
 def _derive_resource(tool: str, args: dict) -> str:
     for key in ("path", "url", "command", "pattern"):

@@ -50,9 +50,7 @@ def find_balucode_yaml(start: Path | None = None) -> Path | None:
 def load_balucode_yaml(path: Path | None = None) -> BaluCodeYaml:
     found = path or find_balucode_yaml()
     if found is None:
-        raise FileNotFoundError(
-            "No .balucode.yaml found. Run `balu-code init` first."
-        )
+        raise FileNotFoundError("No .balucode.yaml found. Run `balu-code init` first.")
     return BaluCodeYaml.model_validate(yaml.safe_load(found.read_text()))
 
 

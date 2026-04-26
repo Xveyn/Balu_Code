@@ -69,7 +69,9 @@ def test_ollama_schemas_shape():
 
 async def test_tool_execute_returns_tool_result():
     t = _EchoTool()
-    ctx = ToolContext(project_root=Path("/tmp"), project_id=1, turn_id="t_1", cancel_token=CancelToken())
+    ctx = ToolContext(
+        project_root=Path("/tmp"), project_id=1, turn_id="t_1", cancel_token=CancelToken()
+    )
     result = await t.execute(_EchoArgs(message="hi"), ctx)
     assert isinstance(result, ToolResult)
     assert result.status == "ok"

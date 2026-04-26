@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 
 import pytest
 from balu_code_shared.events import (
+    Approval,
+    ApprovalRequest,
     Error,
     Event,
     ToolCall,
@@ -14,7 +17,8 @@ from balu_code_shared.events import (
 )
 
 from plugin.config import BaluCodePluginConfig
-from plugin.services.agent_loop import TurnDeps, run_turn
+from plugin.services.agent_loop import TurnContext, TurnDeps, run_turn
+from plugin.services.cancel import CancelToken
 from plugin.services.project_store import Project, ProjectStore
 from plugin.services.repo_map import RepoMap
 from plugin.services.tools import default_registry
@@ -233,16 +237,6 @@ async def test_unknown_tool_name_emits_error_tool_result(deps_factory):
     assert tool_results[0].status == "error"
 
 
-# ── Task 10 additions ─────────────────────────────────────────────────────────
-
-import asyncio
-
-from balu_code_shared.events import Approval, ApprovalRequest
-
-from plugin.services.agent_loop import TurnContext
-from plugin.services.cancel import CancelToken
-
-
 class _TrackingAuditLogger:
     def __init__(self) -> None:
         self.calls: list[dict] = []
@@ -271,9 +265,7 @@ def _registry_with_write():
 
 class TestApprovalGateAndAudit:
     @pytest.mark.asyncio
-    async def test_write_tool_emits_approval_request_and_awaits(
-        self, deps_factory, tmp_project
-    ):
+    async def test_write_tool_emits_approval_request_and_awaits(self, deps_factory, tmp_project):
         deps = deps_factory(
             [
                 [
@@ -310,9 +302,7 @@ class TestApprovalGateAndAudit:
             req = next(e for e in events if isinstance(e, ApprovalRequest))
             fut = ctx.pending_approvals.get(req.tool_call_id)
             if fut and not fut.done():
-                fut.set_result(
-                    Approval(tool_call_id=req.tool_call_id, approved=True, reason=None)
-                )
+                fut.set_result(Approval(tool_call_id=req.tool_call_id, approved=True, reason=None))
 
         async with asyncio.TaskGroup() as tg:
             tg.create_task(approver())
@@ -368,11 +358,7 @@ class TestApprovalGateAndAudit:
             req = next(e for e in events if isinstance(e, ApprovalRequest))
             fut = ctx.pending_approvals.get(req.tool_call_id)
             if fut and not fut.done():
-                fut.set_result(
-                    Approval(
-                        tool_call_id=req.tool_call_id, approved=False, reason="no"
-                    )
-                )
+                fut.set_result(Approval(tool_call_id=req.tool_call_id, approved=False, reason="no"))
 
         async with asyncio.TaskGroup() as tg:
             tg.create_task(rejecter())
@@ -385,9 +371,7 @@ class TestApprovalGateAndAudit:
         assert end.stop_reason == "done"
 
     @pytest.mark.asyncio
-    async def test_audit_logger_called_for_every_tool_result(
-        self, deps_factory, fake_audit
-    ):
+    async def test_audit_logger_called_for_every_tool_result(self, deps_factory, fake_audit):
         deps = deps_factory(
             [
                 [
@@ -426,9 +410,7 @@ class TestStopReasonMaxTokens:
     @pytest.mark.asyncio
     async def test_token_cap_trip_uses_max_tokens_reason(self, deps_factory):
         deps = deps_factory(
-            [
-                [{"message": {"content": "long reply", "tool_calls": None}, "done": True}]
-            ]
+            [[{"message": {"content": "long reply", "tool_calls": None}, "done": True}]]
         )
         deps.config.max_total_tokens_per_turn = 1  # cap lower than any context
 

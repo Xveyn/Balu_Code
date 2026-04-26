@@ -111,3 +111,22 @@ async def test_is_running_for_project_false_after_done(tracker):
     job = tracker.start_job(project_id=1, worker=worker)
     await _wait_for_status(tracker, job.id, JobStatus.DONE)
     assert tracker.is_running_for_project(1) is False
+
+
+async def test_completed_jobs_purged_when_limit_exceeded(tracker):
+    from plugin.services.index_jobs import _MAX_FINISHED_JOBS
+
+    async def noop(job: IndexJob) -> None:
+        pass
+
+    first_id = None
+    for _ in range(_MAX_FINISHED_JOBS + 5):
+        j = tracker.start_job(project_id=1, worker=noop)
+        if first_id is None:
+            first_id = j.id
+        await _wait_for_status(tracker, j.id, JobStatus.DONE)
+
+    await asyncio.sleep(0)  # let done callbacks fire before checking _tasks
+    assert len(tracker._jobs) <= _MAX_FINISHED_JOBS
+    assert tracker.get_job(first_id) is None  # oldest entry evicted
+    assert len(tracker._tasks) == 0  # completed asyncio tasks cleaned up

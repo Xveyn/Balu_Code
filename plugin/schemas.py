@@ -7,7 +7,7 @@ schemas without pulling in lifecycle code.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from plugin.services.index_jobs import JobStatus
 from plugin.services.ollama_client import OllamaModel
@@ -47,15 +47,49 @@ class IndexStatusResponse(BaseModel):
     status: JobStatus
     files_total: int
     files_processed: int
-    chunks_total: int
+    chunks_total: int  # chunks upserted in this run, not total chunks in the index
     error: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
 
 
+class ConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ollama_base_url: str | None = None
+    chat_model: str | None = None
+    embed_model: str | None = None
+    context_window: int | None = None
+    repo_map_budget: int | None = None
+    rag_budget: int | None = None
+    rag_top_k: int | None = None
+    max_iterations: int | None = None
+    max_total_tokens_per_turn: int | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+
+
+class LogEntry(BaseModel):
+    id: int
+    timestamp: str
+    user: str | None
+    action: str
+    resource: str | None
+    success: bool
+    error_message: str | None = None
+    turn_id: str | None = None
+    tool_call_id: str | None = None
+
+
+class LogsResponse(BaseModel):
+    entries: list[LogEntry]
+
+
 __all__ = [
+    "ConfigUpdateRequest",
     "IndexJobResponse",
     "IndexStatusResponse",
+    "LogEntry",
+    "LogsResponse",
     "ModelsResponse",
     "ProjectCreate",
     "ProjectsResponse",

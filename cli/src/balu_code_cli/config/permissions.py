@@ -14,19 +14,12 @@ class PermissionsStore(BaseModel):
     permissions: dict[str, dict[str, dict[str, bool]]] = {}
 
     def lookup(self, server_url: str, project_id: int, tool_name: str) -> bool | None:
-        return (
-            self.permissions
-            .get(server_url, {})
-            .get(str(project_id), {})
-            .get(tool_name)
-        )
+        return self.permissions.get(server_url, {}).get(str(project_id), {}).get(tool_name)
 
     def set(self, server_url: str, project_id: int, tool_name: str, approved: bool) -> None:
-        (
-            self.permissions
-            .setdefault(server_url, {})
-            .setdefault(str(project_id), {})
-        )[tool_name] = approved
+        (self.permissions.setdefault(server_url, {}).setdefault(str(project_id), {}))[tool_name] = (
+            approved
+        )
 
 
 def load_permissions(path: Path | None = None) -> PermissionsStore:

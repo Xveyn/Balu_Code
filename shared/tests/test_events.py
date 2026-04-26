@@ -298,9 +298,7 @@ class TestParseFrameNewEvents:
     def test_parses_approval(self):
         from balu_code_shared.events import Approval, parse_frame
 
-        evt = parse_frame(
-            {"type": "approval", "tool_call_id": "tc_1", "approved": True}
-        )
+        evt = parse_frame({"type": "approval", "tool_call_id": "tc_1", "approved": True})
         assert isinstance(evt, Approval)
 
     def test_parses_cancel(self):

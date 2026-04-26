@@ -33,3 +33,14 @@ def test_plugin_display_name():
 def test_plugin_category_is_general():
     p = BaluCodePlugin()
     assert p.metadata.category == "general"
+
+
+def test_get_ui_manifest_returns_manifest_with_nav_item():
+    from app.plugins.base import PluginUIManifest
+
+    p = BaluCodePlugin()
+    manifest = p.get_ui_manifest()
+    assert isinstance(manifest, PluginUIManifest)
+    assert manifest.bundle_path == "ui/bundle.js"
+    assert len(manifest.nav_items) >= 1
+    assert manifest.nav_items[0].label == "Balu Code"

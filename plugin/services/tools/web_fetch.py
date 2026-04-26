@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Optional
 
 import httpx
 import trafilatura
@@ -36,7 +35,7 @@ class WebFetchTool:
     args_schema = WebFetchArgs
     risk = "network"
 
-    def __init__(self, transport: Optional[httpx.AsyncBaseTransport] = None) -> None:
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
     async def execute(self, args: WebFetchArgs, ctx: ToolContext) -> ToolResult:

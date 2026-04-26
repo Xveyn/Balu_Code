@@ -151,9 +151,8 @@ class ApplyPatchTool:
             changed.append(f"{'+' if action == 'create' else '~'}{rel_display}")
 
         bytes_out = sum(len(b or b"") for _, _, b in planned)
-        summary = (
-            f"applied {hunks_total} hunk(s) across {len(changed)} file(s): "
-            + ", ".join(changed)
+        summary = f"applied {hunks_total} hunk(s) across {len(changed)} file(s): " + ", ".join(
+            changed
         )
         return ToolResult(status="ok", text=summary, bytes_out=bytes_out)
 
