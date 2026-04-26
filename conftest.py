@@ -3,7 +3,7 @@
 Runs before any test module or plugin package is imported. Adds the
 BaluHost stub to sys.path so ``from app.plugins.base import ...`` inside
 ``plugin/__init__.py`` resolves during collection, without BaluHost
-needing to be installed.
+needing to be installed. Also adds cli/src for the CLI package.
 """
 
 from __future__ import annotations
@@ -14,3 +14,7 @@ from pathlib import Path
 _STUB_DIR = Path(__file__).parent / "plugin" / "tests" / "fixtures" / "baluhost_stub"
 if str(_STUB_DIR) not in sys.path:
     sys.path.insert(0, str(_STUB_DIR))
+
+_CLI_SRC = Path(__file__).parent / "cli" / "src"
+if str(_CLI_SRC) not in sys.path:
+    sys.path.insert(0, str(_CLI_SRC))
