@@ -24,7 +24,10 @@ async def test_ps_returns_loaded_models():
         ]
     }
     client = OllamaClient(transport=_transport(200, body))
-    models = await client.ps()
+    try:
+        models = await client.ps()
+    finally:
+        await client.close()
     assert len(models) == 2
     assert models[0]["name"] == "qwen2.5-coder:14b"
     assert models[0]["size_vram"] == 9_200_000_000
@@ -34,12 +37,18 @@ async def test_ps_returns_loaded_models():
 @pytest.mark.asyncio
 async def test_ps_returns_empty_list_when_no_models():
     client = OllamaClient(transport=_transport(200, {"models": []}))
-    models = await client.ps()
+    try:
+        models = await client.ps()
+    finally:
+        await client.close()
     assert models == []
 
 
 @pytest.mark.asyncio
 async def test_ps_returns_empty_on_unreachable():
     client = OllamaClient(transport=_transport(500, {"error": "fail"}))
-    models = await client.ps()
+    try:
+        models = await client.ps()
+    finally:
+        await client.close()
     assert models == []
