@@ -20,7 +20,11 @@ console = Console()
 
 
 def _find_session(sess_dir: Path, id_prefix: str) -> Path:
-    matches = [f for f in sess_dir.glob("*.jsonl") if id_prefix in f.stem]
+    def _uuid_part(f: Path) -> str:
+        parts = f.stem.split("_", 2)
+        return parts[2] if len(parts) >= 3 else f.stem
+
+    matches = [f for f in sess_dir.glob("*.jsonl") if _uuid_part(f).startswith(id_prefix)]
     if not matches:
         console.print(f"[red]No session matches prefix '{id_prefix}'[/red]")
         raise typer.Exit(1)
