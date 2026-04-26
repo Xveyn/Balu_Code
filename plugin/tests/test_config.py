@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from plugin.config import BaluCodePluginConfig
+from plugin.schemas import ConfigUpdateRequest
 
 
 def test_defaults_are_populated():
@@ -24,9 +28,6 @@ def test_model_dump_round_trip():
 
 
 def test_rejects_unknown_fields():
-    import pytest
-    from pydantic import ValidationError
-
     with pytest.raises(ValidationError):
         BaluCodePluginConfig.model_validate({"ollama_base_url": "http://x", "unknown": 1})
 
@@ -43,9 +44,6 @@ def test_defaults_for_phase_4a_fields():
 
 
 def test_temperature_rejects_out_of_range():
-    import pytest
-    from pydantic import ValidationError
-
     with pytest.raises(ValidationError):
         BaluCodePluginConfig(temperature=-0.1)
     with pytest.raises(ValidationError):
@@ -58,21 +56,20 @@ def test_poll_interval_seconds_default():
 
 
 def test_poll_interval_seconds_min_enforced():
-    import pytest
-
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         BaluCodePluginConfig(poll_interval_seconds=2)
 
 
+def test_poll_interval_seconds_max_enforced():
+    with pytest.raises(ValidationError):
+        BaluCodePluginConfig(poll_interval_seconds=301)
+
+
 def test_config_update_request_accepts_poll_interval():
-    from plugin.schemas import ConfigUpdateRequest
     req = ConfigUpdateRequest(poll_interval_seconds=5)
     assert req.poll_interval_seconds == 5
 
 
 def test_config_update_request_rejects_poll_interval_below_3():
-    import pytest
-    from plugin.schemas import ConfigUpdateRequest
-
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ConfigUpdateRequest(poll_interval_seconds=2)
