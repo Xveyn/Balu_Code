@@ -221,7 +221,7 @@ async def run_turn(
             async for frame in deps.ollama.chat_stream(
                 deps.config.chat_model,
                 messages,
-                options={"temperature": deps.config.temperature},
+                options={"temperature": deps.config.temperature, "num_ctx": deps.config.context_window},
             ):
                 try:
                     ctx.cancel_token.check()
