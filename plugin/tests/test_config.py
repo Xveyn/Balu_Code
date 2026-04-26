@@ -50,3 +50,29 @@ def test_temperature_rejects_out_of_range():
         BaluCodePluginConfig(temperature=-0.1)
     with pytest.raises(ValidationError):
         BaluCodePluginConfig(temperature=2.5)
+
+
+def test_poll_interval_seconds_default():
+    cfg = BaluCodePluginConfig()
+    assert cfg.poll_interval_seconds == 10
+
+
+def test_poll_interval_seconds_min_enforced():
+    import pytest
+
+    with pytest.raises(Exception):
+        BaluCodePluginConfig(poll_interval_seconds=2)
+
+
+def test_config_update_request_accepts_poll_interval():
+    from plugin.schemas import ConfigUpdateRequest
+    req = ConfigUpdateRequest(poll_interval_seconds=5)
+    assert req.poll_interval_seconds == 5
+
+
+def test_config_update_request_rejects_poll_interval_below_3():
+    import pytest
+    from plugin.schemas import ConfigUpdateRequest
+
+    with pytest.raises(Exception):
+        ConfigUpdateRequest(poll_interval_seconds=2)

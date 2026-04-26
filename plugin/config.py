@@ -27,6 +27,7 @@ class BaluCodePluginConfig(BaseModel):
     max_iterations: int = 12
     max_total_tokens_per_turn: int = 80000
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    poll_interval_seconds: int = Field(default=10, ge=3, le=300)
 
 
 __all__ = ["BaluCodePluginConfig"]
