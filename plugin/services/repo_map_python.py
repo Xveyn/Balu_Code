@@ -15,7 +15,7 @@ import threading
 import tree_sitter_python as tsp
 from tree_sitter import Language, Parser
 
-from plugin.services.repo_map_types import ClassSymbol, FunctionSymbol
+from .repo_map_types import ClassSymbol, FunctionSymbol
 
 _parser: Parser | None = None
 _parser_lock = threading.Lock()

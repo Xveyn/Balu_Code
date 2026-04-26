@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from plugin.services.repo_map import IGNORE_DIRS
-from plugin.services.tools.base import ToolContext, ToolResult
+from ..repo_map import IGNORE_DIRS
+from .base import ToolContext, ToolResult
 
 _MAX_RESULTS = 1000
 

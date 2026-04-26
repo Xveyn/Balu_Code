@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from plugin.services.paths import PathEscapesProjectError, resolve_within_project
-from plugin.services.tools.base import ToolContext, ToolResult
+from ..paths import PathEscapesProjectError, resolve_within_project
+from .base import ToolContext, ToolResult
 
 
 class ReadFileArgs(BaseModel):

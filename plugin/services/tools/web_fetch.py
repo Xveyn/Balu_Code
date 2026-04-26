@@ -9,7 +9,7 @@ import httpx
 import trafilatura
 from pydantic import BaseModel, Field, HttpUrl
 
-from plugin.services.tools.base import ToolContext, ToolResult
+from .base import ToolContext, ToolResult
 
 _TIMEOUT_S = 20.0
 _MAX_REDIRECTS = 5

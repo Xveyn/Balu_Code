@@ -8,7 +8,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
-from plugin.services.cancel import CancelToken
+from ..cancel import CancelToken
 
 
 @dataclass(frozen=True, kw_only=True)

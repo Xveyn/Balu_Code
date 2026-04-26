@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from plugin.services.index_jobs import JobStatus
-from plugin.services.ollama_client import OllamaModel
-from plugin.services.project_store import Project
+from .services.index_jobs import JobStatus
+from .services.ollama_client import OllamaModel
+from .services.project_store import Project
 
 
 class ProjectCreate(BaseModel):

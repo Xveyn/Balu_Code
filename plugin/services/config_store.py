@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from plugin.config import BaluCodePluginConfig
+from ..config import BaluCodePluginConfig
 
 _CONFIG_FILE = "plugin_config.json"
 

@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from plugin.services.ollama_client import OllamaClient
-from plugin.services.rag_index import RagIndex
+from .ollama_client import OllamaClient
+from .rag_index import RagIndex
 
 
 class RagRegistry:

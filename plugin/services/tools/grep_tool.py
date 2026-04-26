@@ -13,8 +13,8 @@ import shutil
 
 from pydantic import BaseModel, Field
 
-from plugin.services.repo_map import IGNORE_DIRS
-from plugin.services.tools.base import ToolContext, ToolResult
+from ..repo_map import IGNORE_DIRS
+from .base import ToolContext, ToolResult
 
 _MAX_MATCHES = 500
 _MAX_FILE_BYTES = 2 * 1024 * 1024

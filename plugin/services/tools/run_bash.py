@@ -14,7 +14,7 @@ import signal
 
 from pydantic import BaseModel, Field
 
-from plugin.services.tools.base import ToolContext, ToolResult
+from .base import ToolContext, ToolResult
 
 _TAIL_BYTES = 128 * 1024
 _GRACE_S = 2.0

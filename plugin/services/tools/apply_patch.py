@@ -11,8 +11,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from unidiff import PatchSet
 
-from plugin.services.paths import PathEscapesProjectError, resolve_within_project
-from plugin.services.tools.base import ToolContext, ToolResult
+from ..paths import PathEscapesProjectError, resolve_within_project
+from .base import ToolContext, ToolResult
 
 _DEV_NULL = "/dev/null"
 

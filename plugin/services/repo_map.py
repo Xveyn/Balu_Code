@@ -19,9 +19,9 @@ import json
 import os
 from pathlib import Path
 
-from plugin.services.project_store import ProjectStore
-from plugin.services.repo_map_python import parse_python_file
-from plugin.services.repo_map_types import (
+from .project_store import ProjectStore
+from .repo_map_python import parse_python_file
+from .repo_map_types import (
     ClassSymbol,
     FileSymbols,
     FunctionSymbol,

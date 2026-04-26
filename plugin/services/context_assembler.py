@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from plugin.services.rag_index import SearchHit
-from plugin.services.tokenizer import count_messages_tokens, count_tokens
+from .rag_index import SearchHit
+from .tokenizer import count_messages_tokens, count_tokens
 
 
 @dataclass(frozen=True)

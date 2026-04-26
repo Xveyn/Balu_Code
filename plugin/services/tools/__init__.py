@@ -6,14 +6,14 @@ pre-populated with the Phase-4a read tools.
 
 from __future__ import annotations
 
-from plugin.services.tools.apply_patch import ApplyPatchTool
-from plugin.services.tools.base import Tool, ToolContext, ToolResult
-from plugin.services.tools.glob_tool import GlobTool
-from plugin.services.tools.grep_tool import GrepTool
-from plugin.services.tools.read_file import ReadFileTool
-from plugin.services.tools.run_bash import RunBashTool
-from plugin.services.tools.web_fetch import WebFetchTool
-from plugin.services.tools.write_file import WriteFileTool
+from .apply_patch import ApplyPatchTool
+from .base import Tool, ToolContext, ToolResult
+from .glob_tool import GlobTool
+from .grep_tool import GrepTool
+from .read_file import ReadFileTool
+from .run_bash import RunBashTool
+from .web_fetch import WebFetchTool
+from .write_file import WriteFileTool
 
 
 class ToolRegistry:

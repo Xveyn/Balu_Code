@@ -13,10 +13,10 @@ import hashlib
 import os
 from pathlib import Path
 
-from plugin.services.index_jobs import IndexJob, JobStatus
-from plugin.services.rag_chunker import chunk_python_file
-from plugin.services.rag_index import RagIndex
-from plugin.services.repo_map import IGNORE_DIRS
+from .index_jobs import IndexJob, JobStatus
+from .rag_chunker import chunk_python_file
+from .rag_index import RagIndex
+from .repo_map import IGNORE_DIRS
 
 
 async def run_index_job(

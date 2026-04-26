@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plugin.config import BaluCodePluginConfig
-from plugin.services.audit import AuditLogger
-from plugin.services.index_jobs import IndexJobTracker
-from plugin.services.ollama_client import OllamaClient
-from plugin.services.project_store import ProjectStore
-from plugin.services.rag_registry import RagRegistry
-from plugin.services.tools import ToolRegistry
+from .config import BaluCodePluginConfig
+from .services.audit import AuditLogger
+from .services.index_jobs import IndexJobTracker
+from .services.ollama_client import OllamaClient
+from .services.project_store import ProjectStore
+from .services.rag_registry import RagRegistry
+from .services.tools import ToolRegistry
 
 _store: ProjectStore | None = None
 _ollama: OllamaClient | None = None

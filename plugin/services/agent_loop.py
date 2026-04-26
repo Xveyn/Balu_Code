@@ -28,22 +28,22 @@ from balu_code_shared.events import (
 )
 from pydantic import ValidationError
 
-from plugin.config import BaluCodePluginConfig
-from plugin.services.audit import AuditLogger
-from plugin.services.cancel import CancelToken
-from plugin.services.context_assembler import assemble_context
-from plugin.services.ollama_client import (
+from ..config import BaluCodePluginConfig
+from .audit import AuditLogger
+from .cancel import CancelToken
+from .context_assembler import assemble_context
+from .ollama_client import (
     OllamaClient,
     OllamaRateLimited,
     OllamaTimeoutError,
     OllamaUnreachable,
 )
-from plugin.services.project_store import Project
-from plugin.services.rag_index import RagIndex
-from plugin.services.repo_map import RepoMap
-from plugin.services.tokenizer import count_messages_tokens, count_tokens
-from plugin.services.tools import ToolRegistry
-from plugin.services.tools.base import ToolContext
+from .project_store import Project
+from .rag_index import RagIndex
+from .repo_map import RepoMap
+from .tokenizer import count_messages_tokens, count_tokens
+from .tools import ToolRegistry
+from .tools.base import ToolContext
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system.md"
 _TOOL_USE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "tool_use.md"

@@ -15,23 +15,23 @@ from app.plugins.base import PluginBase, PluginMetadata
 from app.services.audit import get_audit_logger_db
 from fastapi import APIRouter
 
-from plugin.config import BaluCodePluginConfig
-from plugin.data_dir import resolve_data_dir
-from plugin.deps import clear_singletons, set_singletons
-from plugin.routes import build_router
-from plugin.services.audit import AuditLogger
-from plugin.services.index_jobs import IndexJobTracker
-from plugin.services.ollama_client import OllamaClient
-from plugin.services.project_store import ProjectStore
-from plugin.services.rag_registry import RagRegistry
-from plugin.services.tools import ToolRegistry, default_registry
+from .config import BaluCodePluginConfig
+from .data_dir import resolve_data_dir
+from .deps import clear_singletons, set_singletons
+from .routes import build_router
+from .services.audit import AuditLogger
+from .services.index_jobs import IndexJobTracker
+from .services.ollama_client import OllamaClient
+from .services.project_store import ProjectStore
+from .services.rag_registry import RagRegistry
+from .services.tools import ToolRegistry, default_registry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
 
 
 class BaluCodePlugin(PluginBase):
-    """Main plugin class. Metadata read from plugin.json at import time."""
+    """Main plugin class. Metadata read from .json at import time."""
 
     def __init__(self) -> None:
         self._config = BaluCodePluginConfig()
@@ -77,7 +77,7 @@ class BaluCodePlugin(PluginBase):
         )
 
     async def on_startup(self) -> None:
-        from plugin.services.config_store import load_plugin_config
+        from .services.config_store import load_plugin_config
 
         data_dir = resolve_data_dir()
         self._config = load_plugin_config(data_dir)

@@ -20,8 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from plugin.config import BaluCodePluginConfig
-from plugin.deps import (
+from .config import BaluCodePluginConfig
+from .deps import (
     get_audit_log,
     get_data_dir,
     get_index_job_tracker,
@@ -32,7 +32,7 @@ from plugin.deps import (
     get_tool_registry,
     update_plugin_config,
 )
-from plugin.schemas import (
+from .schemas import (
     ConfigUpdateRequest,
     IndexJobResponse,
     IndexStatusResponse,
@@ -43,31 +43,31 @@ from plugin.schemas import (
     ProjectsResponse,
     RepoMapResponse,
 )
-from plugin.services.agent_loop import TurnContext, TurnDeps, run_turn
-from plugin.services.cancel import CancelToken
-from plugin.services.config_store import save_plugin_config
-from plugin.services.index_jobs import (
+from .services.agent_loop import TurnContext, TurnDeps, run_turn
+from .services.cancel import CancelToken
+from .services.config_store import save_plugin_config
+from .services.index_jobs import (
     AlreadyIndexingError,
     IndexJob,
     IndexJobTracker,
 )
-from plugin.services.indexer import run_index_job
-from plugin.services.ollama_client import (
+from .services.indexer import run_index_job
+from .services.ollama_client import (
     OllamaClient,
     OllamaRateLimited,
     OllamaTimeoutError,
     OllamaUnreachable,
 )
-from plugin.services.project_store import (
+from .services.project_store import (
     DuplicateProjectError,
     Project,
     ProjectNotFoundError,
     ProjectStore,
 )
-from plugin.services.rag_index import RagIndexUnavailable
-from plugin.services.rag_registry import RagRegistry
-from plugin.services.repo_map import ProjectRootNotAccessible, RepoMap
-from plugin.services.tools import ToolRegistry
+from .services.rag_index import RagIndexUnavailable
+from .services.rag_registry import RagRegistry
+from .services.repo_map import ProjectRootNotAccessible, RepoMap
+from .services.tools import ToolRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())

@@ -21,8 +21,8 @@ from pathlib import Path
 
 import sqlite_vec
 
-from plugin.services.ollama_client import OllamaClient
-from plugin.services.rag_chunker import Chunk
+from .ollama_client import OllamaClient
+from .rag_chunker import Chunk
 
 _TOKEN_RE = re.compile(r"[^\W_]+", flags=re.UNICODE)
 
