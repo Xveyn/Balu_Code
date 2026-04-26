@@ -49,6 +49,7 @@ from .schemas import (
     ProjectsResponse,
     RepoMapResponse,
     SystemResponse,
+    TurnCurrentResponse,
 )
 from .services.agent_loop import TurnContext, TurnDeps, run_turn
 from .services.cancel import CancelToken
@@ -173,6 +174,26 @@ def build_router() -> APIRouter:
         ollama_info = OllamaSystemInfo(reachable=True, loaded_models=loaded)
         gpu_info = GpuInfo(available=False) if gpu_raw is None else GpuInfo(**gpu_raw)
         return SystemResponse(ollama=ollama_info, gpu=gpu_info)
+
+    @router.get("/turns/current", response_model=TurnCurrentResponse, tags=["balu_code"])
+    async def get_turns_current(
+        _user: UserPublic = Depends(get_current_user),
+    ) -> TurnCurrentResponse:
+        from datetime import datetime, timezone
+        from .services.active_turn import get_active
+        turn = get_active()
+        if turn is None:
+            return TurnCurrentResponse(active=False)
+        elapsed = int((datetime.now(timezone.utc) - turn.started_at).total_seconds())
+        return TurnCurrentResponse(
+            active=True,
+            turn_id=turn.turn_id,
+            model=turn.model,
+            started_at=turn.started_at.isoformat(),
+            elapsed_seconds=elapsed,
+            iterations=turn.iterations,
+            username=turn.username,
+        )
 
     @router.post(
         "/projects",

@@ -109,6 +109,16 @@ class SystemResponse(BaseModel):
     gpu: GpuInfo
 
 
+class TurnCurrentResponse(BaseModel):
+    active: bool
+    turn_id: str | None = None
+    model: str | None = None
+    started_at: str | None = None
+    elapsed_seconds: int | None = None
+    iterations: int | None = None
+    username: str | None = None
+
+
 __all__ = [
     "ConfigUpdateRequest",
     "GpuInfo",
@@ -123,4 +133,5 @@ __all__ = [
     "ProjectsResponse",
     "RepoMapResponse",
     "SystemResponse",
+    "TurnCurrentResponse",
 ]
