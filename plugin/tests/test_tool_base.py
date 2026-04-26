@@ -75,3 +75,18 @@ async def test_tool_execute_returns_tool_result():
     assert result.status == "ok"
     assert result.text == "hi"
     assert result.bytes_out == 2
+
+
+def test_default_registry_includes_all_seven_tools():
+    from plugin.services.tools import default_registry
+
+    reg = default_registry()
+    assert set(reg.names()) == {
+        "read_file",
+        "glob",
+        "grep",
+        "write_file",
+        "apply_patch",
+        "run_bash",
+        "web_fetch",
+    }

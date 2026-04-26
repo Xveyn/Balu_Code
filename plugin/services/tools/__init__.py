@@ -6,10 +6,14 @@ pre-populated with the Phase-4a read tools.
 
 from __future__ import annotations
 
+from plugin.services.tools.apply_patch import ApplyPatchTool
 from plugin.services.tools.base import Tool, ToolContext, ToolResult
 from plugin.services.tools.glob_tool import GlobTool
 from plugin.services.tools.grep_tool import GrepTool
 from plugin.services.tools.read_file import ReadFileTool
+from plugin.services.tools.run_bash import RunBashTool
+from plugin.services.tools.web_fetch import WebFetchTool
+from plugin.services.tools.write_file import WriteFileTool
 
 
 class ToolRegistry:
@@ -44,18 +48,29 @@ class ToolRegistry:
 
 
 def default_registry() -> ToolRegistry:
-    """Return a ToolRegistry pre-populated with the Phase-4a read tools."""
+    """Return a ToolRegistry pre-populated with all Phase-4b tools."""
     reg = ToolRegistry()
     reg.register(ReadFileTool())
     reg.register(GlobTool())
     reg.register(GrepTool())
+    reg.register(WriteFileTool())
+    reg.register(ApplyPatchTool())
+    reg.register(RunBashTool())
+    reg.register(WebFetchTool())
     return reg
 
 
 __all__ = [
+    "ApplyPatchTool",
+    "GlobTool",
+    "GrepTool",
+    "ReadFileTool",
+    "RunBashTool",
     "Tool",
     "ToolContext",
     "ToolRegistry",
     "ToolResult",
+    "WebFetchTool",
+    "WriteFileTool",
     "default_registry",
 ]
