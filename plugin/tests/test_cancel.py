@@ -34,16 +34,22 @@ def test_check_is_noop_when_not_cancelled() -> None:
 @pytest.mark.asyncio
 async def test_wait_blocks_until_cancelled() -> None:
     tok = CancelToken()
+    events: list[str] = []
+
+    async def waiter() -> None:
+        await tok.wait()
+        events.append("wait_returned")
 
     async def canceller() -> None:
         await asyncio.sleep(0.01)
         tok.cancel()
+        events.append("cancelled")
 
     async with asyncio.TaskGroup() as tg:
+        tg.create_task(waiter())
         tg.create_task(canceller())
-        await asyncio.wait_for(tok.wait(), timeout=1.0)
 
-    assert tok.cancelled is True
+    assert events == ["cancelled", "wait_returned"]
 
 
 @pytest.mark.asyncio

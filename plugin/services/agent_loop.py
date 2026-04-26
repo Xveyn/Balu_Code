@@ -232,6 +232,10 @@ async def run_turn(
             project_root=Path(deps.project.root_path),
             project_id=deps.project.id,
             turn_id=turn_id,
+            # TODO(Task 11): accept cancel_token from run_turn() signature (per-turn
+            # token supplied by the WS handler). This synthesized token is a
+            # compilation stub and is unreachable from outside — cancellation will
+            # not work until rewired.
             cancel_token=CancelToken(),
         )
         for call in tool_calls_from_stream:
