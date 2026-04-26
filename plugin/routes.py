@@ -371,7 +371,7 @@ def build_router() -> APIRouter:
         audit_log=Depends(get_audit_log),
     ) -> None:
         try:
-            await _ws_auth(websocket)
+            user = await _ws_auth(websocket)
         except WebSocketDisconnect:
             return
 
