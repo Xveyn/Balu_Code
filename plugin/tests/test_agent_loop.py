@@ -266,11 +266,7 @@ def _make_ctx(turn_id: str = "t_1", username: str = "sven") -> TurnContext:
 
 
 def _registry_with_write():
-    from plugin.services.tools.write_file import WriteFileTool
-
-    reg = default_registry()
-    reg.register(WriteFileTool())
-    return reg
+    return default_registry()
 
 
 class TestApprovalGateAndAudit:

@@ -117,7 +117,7 @@ async def test_startup_registers_tool_registry_and_config(tmp_path, monkeypatch)
         reg = get_tool_registry()
         cfg = get_plugin_config()
         assert isinstance(reg, ToolRegistry)
-        assert reg.names() == ["glob", "grep", "read_file"]
+        assert reg.names() == ["apply_patch", "glob", "grep", "read_file", "run_bash", "web_fetch", "write_file"]
         assert isinstance(cfg, BaluCodePluginConfig)
     finally:
         await p.on_shutdown()

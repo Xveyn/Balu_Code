@@ -23,6 +23,7 @@ from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.project_store import ProjectStore
 from plugin.services.tools import ToolRegistry, default_registry
 from plugin.services.tools.base import ToolResult
+from plugin.services.tools.read_file import ReadFileTool
 
 
 class _NoopAuditLogger:
@@ -95,7 +96,19 @@ def _make_project(store: ProjectStore, root: str) -> int:
     return store.create_project(name="chat-route", root_path=root, config_yaml=None).id
 
 
-def _client(store, ollama, rag_registry, tool_registry, config) -> TestClient:
+class _TrackingAuditLogger:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def record_tool_call(self, **kw) -> None:
+        self.calls.append(kw)
+        import asyncio as _asyncio
+        await _asyncio.sleep(0)  # yield to event loop so cancel frames can be processed
+
+
+def _client(store, ollama, rag_registry, tool_registry, config, audit_log=None) -> TestClient:
+    if audit_log is None:
+        audit_log = _NoopAuditLogger()
     app = FastAPI()
     plugin = BaluCodePlugin()
     app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
@@ -105,7 +118,7 @@ def _client(store, ollama, rag_registry, tool_registry, config) -> TestClient:
     app.dependency_overrides[get_index_job_tracker] = lambda: IndexJobTracker()
     app.dependency_overrides[get_tool_registry] = lambda: tool_registry
     app.dependency_overrides[get_plugin_config] = lambda: config
-    app.dependency_overrides[get_audit_log] = lambda: _NoopAuditLogger()
+    app.dependency_overrides[get_audit_log] = lambda: audit_log
     return TestClient(app)
 
 
@@ -270,3 +283,127 @@ def test_chat_cancel_at_approval_gate_stops_turn(tmp_path, store):
             if ev["type"] == "turn_end":
                 assert ev["stop_reason"] == "cancelled"
                 break
+
+
+class TestApprovalFlowE2E:
+    def test_approval_approved_dispatches_tool_and_audits(self, tmp_path, store):
+        (tmp_path / "f.py").write_text("x\n")
+        pid = _make_project(store, str(tmp_path))
+        _tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
+        ollama = _FakeOllama([
+            [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
+            [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+        ])
+        audit = _TrackingAuditLogger()
+        c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit)
+        with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+            ws.send_json({"type": "user_message", "content": "write something"})
+            tc_id = None
+            while True:
+                ev = ws.receive_json()
+                if ev["type"] == "approval_request":
+                    tc_id = ev["tool_call_id"]
+                    break
+                if ev["type"] == "turn_end":
+                    break
+            assert tc_id is not None
+            ws.send_json({"type": "approval", "tool_call_id": tc_id, "approved": True})
+            while True:
+                ev = ws.receive_json()
+                if ev["type"] == "turn_end":
+                    assert ev["stop_reason"] == "done"
+                    break
+        assert len(audit.calls) >= 1
+        tool_call = next(c for c in audit.calls if c["tool"] == "echo")
+        assert tool_call["approved"] is True
+        assert tool_call["status"] == "ok"
+
+    def test_approval_rejected_feeds_error_back_and_continues(self, tmp_path, store):
+        (tmp_path / "f.py").write_text("x\n")
+        pid = _make_project(store, str(tmp_path))
+        _tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
+        ollama = _FakeOllama([
+            [{"message": {"content": "", "tool_calls": _tc}, "done": True}],
+            [{"message": {"content": "done", "tool_calls": None}, "done": True}],
+        ])
+        audit = _TrackingAuditLogger()
+        c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig(), audit)
+        with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+            ws.send_json({"type": "user_message", "content": "write something"})
+            tc_id = None
+            while True:
+                ev = ws.receive_json()
+                if ev["type"] == "approval_request":
+                    tc_id = ev["tool_call_id"]
+                    break
+                if ev["type"] == "turn_end":
+                    break
+            assert tc_id is not None
+            ws.send_json({"type": "approval", "tool_call_id": tc_id, "approved": False, "reason": "no thanks"})
+            events = []
+            while True:
+                ev = ws.receive_json()
+                events.append(ev)
+                if ev["type"] == "turn_end":
+                    break
+        tool_results = [e for e in events if e["type"] == "tool_result"]
+        assert any("user rejected" in (e.get("error") or "") for e in tool_results)
+        end = next(e for e in events if e["type"] == "turn_end")
+        assert end["stop_reason"] == "done"
+        assert any(c["approved"] is False for c in audit.calls)
+
+    def test_unknown_approval_returns_error_frame(self, tmp_path, store):
+        (tmp_path / "f.py").write_text("x\n")
+        pid = _make_project(store, str(tmp_path))
+        c = _client(store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig())
+        with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+            ws.send_json({"type": "approval", "tool_call_id": "bogus_tc", "approved": True})
+            ev = ws.receive_json()
+            assert ev["type"] == "error"
+            assert ev["code"] == "unknown_approval"
+
+
+class TestCancelFlowE2E:
+    def test_cancel_after_first_tool_during_second_approval_ends_turn_cancelled(self, tmp_path, store):
+        # Iter 1: read_file (auto-approved) → ToolResult
+        # Iter 2: echo (write, needs approval) → ApprovalRequest, then Cancel
+        (tmp_path / "f.py").write_text("content\n")
+        pid = _make_project(store, str(tmp_path))
+        _read_tc = [{"function": {"name": "read_file", "arguments": {"path": "f.py"}}}]
+        _echo_tc = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
+        ollama = _FakeOllama([
+            [{"message": {"content": "", "tool_calls": _read_tc}, "done": True}],
+            [{"message": {"content": "", "tool_calls": _echo_tc}, "done": True}],
+        ])
+        registry = ToolRegistry()
+        registry.register(ReadFileTool())
+        registry.register(_EchoWriteTool())
+        c = _client(store, ollama, _FakeRagRegistry(), registry, BaluCodePluginConfig())
+        with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+            ws.send_json({"type": "user_message", "content": "read then write"})
+            turn_id = None
+            while True:
+                ev = ws.receive_json()
+                if ev["type"] == "turn_start":
+                    turn_id = ev["turn_id"]
+                if ev["type"] == "approval_request":
+                    break
+                if ev["type"] == "turn_end":
+                    break
+            assert turn_id is not None
+            ws.send_json({"type": "cancel", "turn_id": turn_id})
+            while True:
+                ev = ws.receive_json()
+                if ev["type"] == "turn_end":
+                    assert ev["stop_reason"] == "cancelled"
+                    break
+
+    def test_cancel_wrong_turn_id_returns_error(self, tmp_path, store):
+        (tmp_path / "f.py").write_text("x\n")
+        pid = _make_project(store, str(tmp_path))
+        c = _client(store, _FakeOllama([]), _FakeRagRegistry(), default_registry(), BaluCodePluginConfig())
+        with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+            ws.send_json({"type": "cancel", "turn_id": "bogus_turn"})
+            ev = ws.receive_json()
+            assert ev["type"] == "error"
+            assert ev["code"] == "no_turn_to_cancel"
