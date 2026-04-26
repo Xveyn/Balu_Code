@@ -49,4 +49,4 @@ def config_set(
         setattr(cfg, key, value)
 
     save_config(cfg)
-    console.print(f"[green]{key} = {value}[/green]")
+    console.print(f"[green]{key} = {getattr(cfg, key)}[/green]")
