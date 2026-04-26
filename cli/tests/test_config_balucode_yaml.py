@@ -10,10 +10,6 @@ from balu_code_cli.config.balucode_yaml import (
 )
 
 
-def _write_yaml(path, content):
-    path.write_text(content)
-
-
 def test_load_minimal_yaml(tmp_path):
     f = tmp_path / ".balucode.yaml"
     f.write_text("project_id: 42\nserver_url: https://balu.example.com\n")
