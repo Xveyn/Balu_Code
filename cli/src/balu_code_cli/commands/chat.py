@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 
 from balu_code_cli.client.ws import BaluCodeWS, connect
 from balu_code_cli.config.balucode_yaml import BaluCodeYaml, load_balucode_yaml
 from balu_code_cli.config.loader import load_credentials
-from balu_code_cli.config.permissions import PermissionsStore, load_permissions
+from balu_code_cli.config.permissions import PermissionsStore, load_permissions, save_permissions
 from balu_code_cli.config.paths import permissions_yaml as _permissions_yaml
 
 app = typer.Typer(help="Start an interactive chat session.")
@@ -40,9 +42,43 @@ async def _handle_approval(
     perms_path: Path,
     input_fn: InputFn,
 ) -> None:
-    """Resolve an approval_request. Full logic added in Task 12."""
-    # Task 11 placeholder: always auto-approve
-    await ws.send_approval(event.tool_call_id, approved=True, reason=None)
+    """Resolve an approval_request via priority chain."""
+    tool_name = event.tool
+
+    # Priority 1: --yolo
+    if yolo:
+        await ws.send_approval(event.tool_call_id, approved=True, reason=None)
+        return
+
+    # Priority 2: .balucode.yaml explicit allow
+    if balucode.is_tool_allowed(tool_name):
+        await ws.send_approval(event.tool_call_id, approved=True, reason=None)
+        return
+
+    # Priority 3: permissions.yaml stored decision
+    stored = permissions.lookup(balucode.server_url, balucode.project_id, tool_name)
+    if stored is not None:
+        await ws.send_approval(event.tool_call_id, approved=stored, reason=None)
+        return
+
+    # Priority 4: interactive prompt
+    args_preview = _json.dumps(event.args)[:200]
+    console.print(Panel(
+        f"Tool:  [bold]{tool_name}[/bold]  [dim][risk: {event.risk}][/dim]\n"
+        f"Args:  {args_preview}",
+        title="Approval required",
+    ))
+
+    choice = await input_fn("Allow? [y]es / [n]o / [Y]es always / [N]o always > ")
+    choice = choice.strip()
+    approved = choice in ("y", "Y")
+    always = choice in ("Y", "N")
+
+    if always:
+        permissions.set(balucode.server_url, balucode.project_id, tool_name, approved)
+        save_permissions(permissions, perms_path)
+
+    await ws.send_approval(event.tool_call_id, approved=approved, reason=None)
 
 
 async def _dispatch_turn(
