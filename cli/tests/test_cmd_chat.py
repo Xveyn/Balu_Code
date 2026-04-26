@@ -349,6 +349,7 @@ async def test_interactive_N_denies_always(tmp_path):
 @pytest.mark.asyncio
 async def test_run_chat_writes_session_events(tmp_path):
     from unittest.mock import MagicMock
+
     from balu_code_cli.session.writer import SessionWriter
 
     writer = MagicMock(spec=SessionWriter)
@@ -381,3 +382,31 @@ async def test_run_chat_writes_session_events(tmp_path):
         session_writer=writer,
     )
     assert writer.write_event.call_count == 3
+    writer.write_sent.assert_called_once_with({"type": "user_message", "content": "hello"})
+
+
+@pytest.mark.asyncio
+async def test_run_chat_displays_initial_messages(tmp_path, capsys):
+    async def fake_input(prompt=""):
+        raise EOFError
+
+    ws = _make_fake_ws([])
+
+    await run_chat(
+        balucode=_BALUCODE,
+        api_key="k",
+        yolo=False,
+        project_id=1,
+        ws_factory=_make_ws_factory(ws),
+        input_fn=fake_input,
+        perms_path=tmp_path / "perms.yaml",
+        initial_messages=[
+            {"role": "user", "content": "prior question"},
+            {"role": "assistant", "content": "prior answer"},
+        ],
+    )
+
+    captured = capsys.readouterr()
+    assert "resumed session" in captured.out
+    assert "prior question" in captured.out
+    assert "prior answer" in captured.out
