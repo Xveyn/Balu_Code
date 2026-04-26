@@ -344,3 +344,40 @@ async def test_interactive_N_denies_always(tmp_path):
     ws.send_approval.assert_called_once_with("tc_7", approved=False, reason=None)
     store = load_permissions(perms_path)
     assert store.lookup("https://x.com", 1, "write_file") is False
+
+
+@pytest.mark.asyncio
+async def test_run_chat_writes_session_events(tmp_path):
+    from unittest.mock import MagicMock
+    from balu_code_cli.session.writer import SessionWriter
+
+    writer = MagicMock(spec=SessionWriter)
+
+    events = [
+        {"type": "turn_start", "turn_id": "t1", "model": "m", "context_tokens": 0},
+        {"type": "token", "content": "hi"},
+        {"type": "turn_end", "turn_id": "t1", "total_tokens": 5, "iterations": 1, "stop_reason": "done"},
+    ]
+    fake_ws = _make_fake_ws(events)
+
+    inputs = asyncio.Queue()
+    await inputs.put("hello")
+    await inputs.put(EOFError())
+
+    async def fake_input(prompt=""):
+        item = await inputs.get()
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    await run_chat(
+        balucode=_BALUCODE,
+        api_key="k",
+        yolo=False,
+        project_id=1,
+        ws_factory=_make_ws_factory(fake_ws),
+        input_fn=fake_input,
+        perms_path=tmp_path / "perms.yaml",
+        session_writer=writer,
+    )
+    assert writer.write_event.call_count == 3

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import getpass
 import json as _json
+import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +19,9 @@ from balu_code_cli.client.ws import BaluCodeWS, connect
 from balu_code_cli.config.balucode_yaml import BaluCodeYaml, load_balucode_yaml
 from balu_code_cli.config.loader import load_credentials
 from balu_code_cli.config.paths import permissions_yaml as _permissions_yaml
+from balu_code_cli.config.paths import sessions_dir as _sessions_dir
 from balu_code_cli.config.permissions import PermissionsStore, load_permissions, save_permissions
+from balu_code_cli.session.writer import SessionWriter
 
 app = typer.Typer(help="Start an interactive chat session.")
 console = Console()
@@ -88,11 +93,14 @@ async def _dispatch_turn(
     permissions: PermissionsStore,
     perms_path: Path,
     input_fn: InputFn,
+    session_writer: SessionWriter | None = None,
 ) -> str | None:
     turn_id = None
 
     while True:
         event = await ws.receive()
+        if session_writer:
+            session_writer.write_event(event)
 
         if event.type == "turn_start":
             turn_id = event.turn_id
@@ -129,12 +137,23 @@ async def run_chat(
     ws_factory=None,
     input_fn: InputFn = _default_input,
     perms_path: Path | None = None,
+    session_writer: SessionWriter | None = None,
+    initial_messages: list[dict] | None = None,
 ) -> None:
     _connect = ws_factory or connect
     _perms_path = perms_path or _permissions_yaml()
     permissions = load_permissions(_perms_path)
 
     async with _connect(balucode.server_url, api_key, project_id) as ws:
+        if initial_messages:
+            console.print("[dim]── resumed session ──[/dim]")
+            for msg in initial_messages:
+                if msg["role"] == "user":
+                    console.print(f"[bold cyan][balu-code] >[/bold cyan] {msg['content']}")
+                else:
+                    console.print(msg["content"])
+            console.print("[dim]── continuing ──[/dim]")
+
         while True:
             try:
                 line = await input_fn("[balu-code] > ")
@@ -148,9 +167,13 @@ async def run_chat(
                 break
 
             await ws.send_message(line)
+            if session_writer:
+                session_writer.write_sent({"type": "user_message", "content": line})
             turn_id = None
             try:
-                turn_id = await _dispatch_turn(ws, balucode, yolo, permissions, _perms_path, input_fn)
+                turn_id = await _dispatch_turn(
+                    ws, balucode, yolo, permissions, _perms_path, input_fn, session_writer
+                )
             except KeyboardInterrupt:
                 if turn_id:
                     await ws.send_cancel(turn_id)
@@ -177,4 +200,16 @@ def chat(
     api_key = creds.servers[balucode.server_url].api_key
     pid = project_id or balucode.project_id
 
-    asyncio.run(run_chat(balucode=balucode, api_key=api_key, yolo=yolo, project_id=pid))
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+    user = getpass.getuser()
+    uid = str(uuid.uuid4())
+    sess_path = _sessions_dir(balucode.server_url, pid) / f"{ts}_{user}_{uid}.jsonl"
+    writer = SessionWriter(sess_path)
+
+    asyncio.run(run_chat(
+        balucode=balucode,
+        api_key=api_key,
+        yolo=yolo,
+        project_id=pid,
+        session_writer=writer,
+    ))
