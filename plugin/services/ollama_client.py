@@ -145,6 +145,8 @@ class OllamaClient:
                 payload = response.json()
             except (json.JSONDecodeError, ValueError) as exc:
                 raise OllamaUnreachable(f"invalid JSON from /api/embeddings: {exc}") from exc
+            if payload.get("error"):
+                raise OllamaUnreachable(f"/api/embeddings error: {payload['error']}")
             try:
                 embedding = payload["embedding"]
             except (KeyError, TypeError) as exc:

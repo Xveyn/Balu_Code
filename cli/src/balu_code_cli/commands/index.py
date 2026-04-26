@@ -54,10 +54,10 @@ def index() -> None:
                     f"{status['chunks_total']} chunks."
                 )
                 return
-            if status["status"] == "failed":
+            if status["status"] == "error":
                 console.print(f"[red]Indexing failed: {status.get('error')}[/red]")
                 raise typer.Exit(1) from None
-            if status["status"] not in ("running", "pending"):
+            if status["status"] not in ("running", "queued"):
                 console.print(f"[red]Unexpected index status: {status['status']}[/red]")
                 raise typer.Exit(1) from None
 
