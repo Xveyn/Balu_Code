@@ -57,5 +57,8 @@ def index() -> None:
             if status["status"] == "failed":
                 console.print(f"[red]Indexing failed: {status.get('error')}[/red]")
                 raise typer.Exit(1)
+            if status["status"] not in ("running", "pending"):
+                console.print(f"[red]Unexpected index status: {status['status']}[/red]")
+                raise typer.Exit(1)
 
             time.sleep(_POLL_INTERVAL)
