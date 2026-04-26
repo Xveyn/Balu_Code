@@ -20,6 +20,11 @@ from plugin.services.repo_map import RepoMap
 from plugin.services.tools import default_registry
 
 
+class _NoopAuditLogger:
+    async def record_tool_call(self, **kwargs) -> None:
+        return None
+
+
 class _FakeOllama:
     def __init__(self, scripted: list[list[dict]]) -> None:
         self._scripted = list(scripted)
@@ -73,6 +78,7 @@ def deps_factory(tmp_project, tmp_path):
             repo_map=repo_map,
             rag=_FakeRag(),
             config=BaluCodePluginConfig(),
+            audit_log=_NoopAuditLogger(),
             system_prompt="sys",
             tool_use_prompt="tool",
         )

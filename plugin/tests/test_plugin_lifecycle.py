@@ -140,3 +140,32 @@ async def test_shutdown_clears_tool_registry_and_config(tmp_path, monkeypatch):
         get_tool_registry()
     with pytest.raises(RuntimeError):
         get_plugin_config()
+
+
+@pytest.mark.asyncio
+async def test_startup_registers_audit_log(tmp_path, monkeypatch):
+    from plugin.deps import clear_singletons, get_audit_log
+    from plugin.services.audit import AuditLogger
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    try:
+        al = get_audit_log()
+        assert isinstance(al, AuditLogger)
+    finally:
+        await p.on_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_clears_audit_log(tmp_path, monkeypatch):
+    from plugin.deps import clear_singletons, get_audit_log
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    await p.on_shutdown()
+    with pytest.raises(RuntimeError):
+        get_audit_log()

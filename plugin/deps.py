@@ -1,6 +1,6 @@
 """Module-level singletons for the balu_code plugin.
 
-``BaluCodePlugin.on_startup`` constructs six singletons and registers
+``BaluCodePlugin.on_startup`` constructs seven singletons and registers
 them here via ``set_singletons``. Route handlers access them via the
 ``get_*`` accessors; tests override via ``app.dependency_overrides``.
 """
@@ -8,6 +8,7 @@ them here via ``set_singletons``. Route handlers access them via the
 from __future__ import annotations
 
 from plugin.config import BaluCodePluginConfig
+from plugin.services.audit import AuditLogger
 from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.ollama_client import OllamaClient
 from plugin.services.project_store import ProjectStore
@@ -20,6 +21,7 @@ _rag_registry: RagRegistry | None = None
 _index_job_tracker: IndexJobTracker | None = None
 _tool_registry: ToolRegistry | None = None
 _plugin_config: BaluCodePluginConfig | None = None
+_audit_log: AuditLogger | None = None
 
 
 def set_singletons(
@@ -29,24 +31,27 @@ def set_singletons(
     index_job_tracker: IndexJobTracker,
     tool_registry: ToolRegistry,
     plugin_config: BaluCodePluginConfig,
+    audit_log: AuditLogger,
 ) -> None:
-    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry, _plugin_config
+    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry, _plugin_config, _audit_log
     _store = store
     _ollama = ollama
     _rag_registry = rag_registry
     _index_job_tracker = index_job_tracker
     _tool_registry = tool_registry
     _plugin_config = plugin_config
+    _audit_log = audit_log
 
 
 def clear_singletons() -> None:
-    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry, _plugin_config
+    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry, _plugin_config, _audit_log
     _store = None
     _ollama = None
     _rag_registry = None
     _index_job_tracker = None
     _tool_registry = None
     _plugin_config = None
+    _audit_log = None
 
 
 def get_project_store() -> ProjectStore:
@@ -85,8 +90,15 @@ def get_plugin_config() -> BaluCodePluginConfig:
     return _plugin_config
 
 
+def get_audit_log() -> AuditLogger:
+    if _audit_log is None:
+        raise RuntimeError("balu_code plugin not initialized (AuditLogger missing)")
+    return _audit_log
+
+
 __all__ = [
     "clear_singletons",
+    "get_audit_log",
     "get_index_job_tracker",
     "get_ollama_client",
     "get_plugin_config",

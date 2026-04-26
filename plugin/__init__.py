@@ -1,9 +1,9 @@
 """Balu Code BaluHost plugin.
 
 Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router
-at /api/plugins/balu_code/ — see ``plugin/routes.py``. Owns six
+at /api/plugins/balu_code/ — see ``plugin/routes.py``. Owns seven
 singletons: ProjectStore, OllamaClient, RagRegistry, IndexJobTracker,
-ToolRegistry, BaluCodePluginConfig.
+ToolRegistry, BaluCodePluginConfig, AuditLogger.
 """
 
 from __future__ import annotations
@@ -12,12 +12,14 @@ import json
 from pathlib import Path
 
 from app.plugins.base import PluginBase, PluginMetadata
+from app.services.audit import get_audit_logger_db
 from fastapi import APIRouter
 
 from plugin.config import BaluCodePluginConfig
 from plugin.data_dir import resolve_data_dir
 from plugin.deps import clear_singletons, set_singletons
 from plugin.routes import build_router
+from plugin.services.audit import AuditLogger
 from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.ollama_client import OllamaClient
 from plugin.services.project_store import ProjectStore
@@ -78,6 +80,7 @@ class BaluCodePlugin(PluginBase):
         )
         index_job_tracker = IndexJobTracker()
         tool_registry = default_registry()
+        audit_log = AuditLogger(get_audit_logger_db())
         self._store = store
         self._ollama = ollama
         self._rag_registry = rag_registry
@@ -90,6 +93,7 @@ class BaluCodePlugin(PluginBase):
             index_job_tracker,
             tool_registry,
             self._config,
+            audit_log,
         )
 
     async def on_shutdown(self) -> None:

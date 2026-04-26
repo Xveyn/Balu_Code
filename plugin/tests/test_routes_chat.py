@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 from plugin import BaluCodePlugin
 from plugin.config import BaluCodePluginConfig
 from plugin.deps import (
+    get_audit_log,
     get_index_job_tracker,
     get_ollama_client,
     get_plugin_config,
@@ -21,6 +22,11 @@ from plugin.deps import (
 from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.project_store import ProjectStore
 from plugin.services.tools import default_registry
+
+
+class _NoopAuditLogger:
+    async def record_tool_call(self, **kwargs) -> None:
+        return None
 
 
 class _FakeOllama:
@@ -75,6 +81,7 @@ def _client(store, ollama, rag_registry, tool_registry, config) -> TestClient:
     app.dependency_overrides[get_index_job_tracker] = lambda: IndexJobTracker()
     app.dependency_overrides[get_tool_registry] = lambda: tool_registry
     app.dependency_overrides[get_plugin_config] = lambda: config
+    app.dependency_overrides[get_audit_log] = lambda: _NoopAuditLogger()
     return TestClient(app)
 
 
@@ -133,6 +140,7 @@ def test_chat_401_when_auth_fails(tmp_path, store):
     app.dependency_overrides[get_index_job_tracker] = lambda: IndexJobTracker()
     app.dependency_overrides[get_tool_registry] = lambda: default_registry()
     app.dependency_overrides[get_plugin_config] = lambda: BaluCodePluginConfig()
+    app.dependency_overrides[get_audit_log] = lambda: _NoopAuditLogger()
     app.dependency_overrides[get_current_user] = _denied
     c = TestClient(app)
     with (

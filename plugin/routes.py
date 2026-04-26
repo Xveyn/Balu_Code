@@ -21,6 +21,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from plugin.config import BaluCodePluginConfig
 from plugin.deps import (
+    get_audit_log,
     get_index_job_tracker,
     get_ollama_client,
     get_plugin_config,
@@ -290,6 +291,7 @@ def build_router() -> APIRouter:
         rag_registry: RagRegistry = Depends(get_rag_registry),
         tool_registry: ToolRegistry = Depends(get_tool_registry),
         config: BaluCodePluginConfig = Depends(get_plugin_config),
+        audit_log=Depends(get_audit_log),
     ) -> None:
         try:
             project = await asyncio.to_thread(store.get_project, project_id)
@@ -318,6 +320,7 @@ def build_router() -> APIRouter:
             repo_map=repo_map,
             rag=rag,
             config=config,
+            audit_log=audit_log,
         )
         history: list[dict] = []
 

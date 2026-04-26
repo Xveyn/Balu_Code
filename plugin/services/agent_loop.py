@@ -39,6 +39,7 @@ from plugin.services.project_store import Project
 from plugin.services.rag_index import RagIndex
 from plugin.services.repo_map import RepoMap
 from plugin.services.tokenizer import count_tokens
+from plugin.services.audit import AuditLogger
 from plugin.services.cancel import CancelToken
 from plugin.services.tools import ToolRegistry
 from plugin.services.tools.base import ToolContext
@@ -60,6 +61,7 @@ class TurnDeps:
     repo_map: RepoMap
     rag: RagIndex
     config: BaluCodePluginConfig
+    audit_log: AuditLogger
     system_prompt: str = _SYSTEM_PROMPT
     tool_use_prompt: str = _TOOL_USE_PROMPT
 
