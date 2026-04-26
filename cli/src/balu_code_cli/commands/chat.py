@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +15,8 @@ from rich.panel import Panel
 from balu_code_cli.client.ws import BaluCodeWS, connect
 from balu_code_cli.config.balucode_yaml import BaluCodeYaml, load_balucode_yaml
 from balu_code_cli.config.loader import load_credentials
-from balu_code_cli.config.permissions import PermissionsStore, load_permissions, save_permissions
 from balu_code_cli.config.paths import permissions_yaml as _permissions_yaml
+from balu_code_cli.config.permissions import PermissionsStore, load_permissions, save_permissions
 
 app = typer.Typer(help="Start an interactive chat session.")
 console = Console()
@@ -167,7 +167,7 @@ def chat(
         balucode = load_balucode_yaml()
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     creds = load_credentials()
     if balucode.server_url not in creds.servers:

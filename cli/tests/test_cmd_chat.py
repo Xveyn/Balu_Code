@@ -2,18 +2,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from typer.testing import CliRunner
-
-from balu_code_cli.__main__ import app
 from balu_code_cli.client.ws import BaluCodeWS
 from balu_code_cli.commands.chat import run_chat
 from balu_code_cli.config.balucode_yaml import BaluCodeYaml
+from typer.testing import CliRunner
 
 runner = CliRunner()
 _BALUCODE = BaluCodeYaml(project_id=1, server_url="https://balu.example.com")
@@ -203,7 +200,7 @@ async def test_stored_yes_auto_approves(tmp_path):
 
 @pytest.mark.asyncio
 async def test_interactive_y_approves_once(tmp_path):
-    from balu_code_cli.config.permissions import PermissionsStore, load_permissions
+    from balu_code_cli.config.permissions import load_permissions
     perms_path = tmp_path / "perms.yaml"
 
     events = [
