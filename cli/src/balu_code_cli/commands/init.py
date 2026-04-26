@@ -24,7 +24,7 @@ def init() -> None:
     server_url = cfg.server_url
     if not server_url or server_url not in creds.servers:
         console.print("[red]Not logged in. Run `balu-code auth login` first.[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     api_key = creds.servers[server_url].api_key
     client = BaluCodeHttpClient(server_url, api_key)
@@ -40,7 +40,7 @@ def init() -> None:
         models = client.list_models()
     except Exception as exc:
         console.print(f"[red]Could not fetch models: {exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     name = typer.prompt("Project name")
     root_path = typer.prompt("Root path", default=str(Path.cwd()))
@@ -53,7 +53,7 @@ def init() -> None:
         project = client.create_project(name, root_path)
     except Exception as exc:
         console.print(f"[red]Failed to create project: {exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     project_id = project["id"]
     data = {

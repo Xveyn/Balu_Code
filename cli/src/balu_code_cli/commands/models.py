@@ -20,14 +20,14 @@ def models() -> None:
     creds = load_credentials()
     if not cfg.server_url or cfg.server_url not in creds.servers:
         console.print("[red]Not logged in. Run `balu-code auth login` first.[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     client = BaluCodeHttpClient(cfg.server_url, creds.servers[cfg.server_url].api_key)
     try:
         names = client.list_models()
     except Exception as exc:
         console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     table = Table(title="Available Models")
     table.add_column("Name")

@@ -23,12 +23,12 @@ def index() -> None:
         balucode = load_balucode_yaml()
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     creds = load_credentials()
     if balucode.server_url not in creds.servers:
         console.print("[red]Not logged in. Run `balu-code auth login` first.[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     client = BaluCodeHttpClient(balucode.server_url, creds.servers[balucode.server_url].api_key)
 
@@ -36,7 +36,7 @@ def index() -> None:
         job = client.start_index(balucode.project_id)
     except Exception as exc:
         console.print(f"[red]Failed to start index: {exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     job_id = job["job_id"]
     with console.status("[bold green]Indexing…"):
@@ -45,7 +45,7 @@ def index() -> None:
                 status = client.index_status(balucode.project_id, job_id)
             except Exception as exc:
                 console.print(f"[red]Error polling status: {exc}[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             if status["status"] == "done":
                 console.print(
@@ -56,9 +56,9 @@ def index() -> None:
                 return
             if status["status"] == "failed":
                 console.print(f"[red]Indexing failed: {status.get('error')}[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
             if status["status"] not in ("running", "pending"):
                 console.print(f"[red]Unexpected index status: {status['status']}[/red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             time.sleep(_POLL_INTERVAL)

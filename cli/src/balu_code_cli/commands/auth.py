@@ -31,10 +31,10 @@ def login() -> None:
         BaluCodeHttpClient(server_url, api_key).health()
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]Authentication failed (HTTP {exc.response.status_code}). Check your API key.[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as exc:
         console.print(f"[red]Could not reach server: {exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     creds = load_credentials()
     creds.servers[server_url] = ServerCredentials(api_key=api_key)
@@ -54,7 +54,7 @@ def status() -> None:
 
     if not cfg.server_url or cfg.server_url not in creds.servers:
         console.print("[yellow]Not logged in. Run `balu-code auth login`.[/yellow]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     server_url = cfg.server_url
     api_key = creds.servers[server_url].api_key
