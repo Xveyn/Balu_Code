@@ -66,7 +66,9 @@ class BaluCodePlugin(PluginBase):
         return BaluCodePluginConfig().model_dump()
 
     async def on_startup(self) -> None:
+        from plugin.services.config_store import load_plugin_config
         data_dir = resolve_data_dir()
+        self._config = load_plugin_config(data_dir)
         store = ProjectStore(data_dir / "store.db")
         try:
             ollama = OllamaClient(base_url=self._config.ollama_base_url)
@@ -94,6 +96,7 @@ class BaluCodePlugin(PluginBase):
             tool_registry,
             self._config,
             audit_log,
+            data_dir,
         )
 
     async def on_shutdown(self) -> None:
