@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from plugin.services.cancel import CancelToken
 from plugin.services.tools.base import ToolContext
@@ -30,7 +31,7 @@ async def test_creates_new_file(ctx: ToolContext) -> None:
     assert result.status == "ok"
     assert (ctx.project_root / "foo.py").read_text() == "print('hi')\n"
     assert "wrote" in result.text.lower()
-    assert result.bytes_out == len("print('hi')\n".encode())
+    assert result.bytes_out == len(b"print('hi')\n")
 
 
 @pytest.mark.asyncio
@@ -80,7 +81,7 @@ async def test_rejects_path_traversal(ctx: ToolContext) -> None:
 
 def test_rejects_content_over_size_cap() -> None:
     big = "x" * (2 * 1024 * 1024 + 1)  # 2 MB + 1 byte
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         WriteFileArgs(path="big.txt", content=big)
 
 

@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from balu_code_cli.config.paths import sessions_dir
 from balu_code_cli.session.writer import SessionWriter
@@ -57,9 +54,9 @@ def test_write_event_appends_line(tmp_path):
     with SessionWriter(path) as w:
         w.write_event(FakeEvent())
         w.write_event(FakeEvent())
-    lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    lines = [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
     assert len(lines) == 2
-    assert all(l["direction"] == "in" for l in lines)
+    assert all(ln["direction"] == "in" for ln in lines)
 
 
 def test_written_lines_are_valid_json(tmp_path):

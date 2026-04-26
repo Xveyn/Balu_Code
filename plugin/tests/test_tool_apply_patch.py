@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from plugin.services.cancel import CancelToken
 from plugin.services.tools.apply_patch import ApplyPatchArgs, ApplyPatchTool
@@ -147,7 +148,7 @@ async def test_rejects_path_traversal(ctx: ToolContext) -> None:
 
 @pytest.mark.asyncio
 async def test_rejects_empty_diff() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ApplyPatchArgs(diff="")
 
 

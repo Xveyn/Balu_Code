@@ -6,6 +6,7 @@ import pytest
 from app.api.deps import get_current_user
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel as _BaseModel
 from starlette.websockets import WebSocketDisconnect
 
 from plugin import BaluCodePlugin
@@ -60,9 +61,6 @@ class _FakeRagRegistry:
 
     async def close_all(self):
         pass
-
-
-from pydantic import BaseModel as _BaseModel
 
 
 class _EchoArgs(_BaseModel):
