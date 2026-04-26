@@ -84,6 +84,29 @@ def _new_tool_call_id(iteration: int, suffix: int) -> str:
     return f"tc_{iteration}_{suffix}"
 
 
+def _try_parse_inline_tool_call(content: str) -> list[dict] | None:
+    """Detect tool calls serialized as JSON in content (qwen2.5-coder style).
+
+    Returns a list in Ollama tool_calls format if the content is a JSON object
+    with "name" and "arguments" keys, otherwise None.
+    """
+    stripped = content.strip()
+    if not (stripped.startswith("{") and stripped.endswith("}")):
+        return None
+    try:
+        obj = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(obj, dict) and "name" in obj and "arguments" in obj:
+        return [{"function": {"name": obj["name"], "arguments": obj["arguments"]}}]
+    return None
+
+
+def _rechunk(text: str, size: int = 64) -> list[str]:
+    """Split text into chunks for streaming after buffering."""
+    return [text[i : i + size] for i in range(0, len(text), size)] if text else []
+
+
 async def run_turn(
     user_message: str,
     history: list[dict],
@@ -192,12 +215,24 @@ async def run_turn(
                 content_piece = message.get("content") or ""
                 if content_piece:
                     buffered_content += content_piece
-                    await emit(Token(content=content_piece))
                 maybe_tool_calls = message.get("tool_calls")
                 if maybe_tool_calls:
                     tool_calls_from_stream = list(maybe_tool_calls)
                 if frame.get("done"):
                     break
+
+        # Some models (e.g. qwen2.5-coder) serialize tool calls as a JSON
+        # object in message.content instead of using message.tool_calls.
+        # Detect and promote that pattern so the tool execution path fires.
+        if not tool_calls_from_stream and buffered_content:
+            promoted = _try_parse_inline_tool_call(buffered_content)
+            if promoted:
+                tool_calls_from_stream = promoted
+                buffered_content = ""
+            else:
+                # Real text response — stream tokens to client now.
+                for piece in _rechunk(buffered_content):
+                    await emit(Token(content=piece))
         except OllamaUnreachable as exc:
             history[:] = history_snapshot
             await emit(Error(code="ollama_unreachable", message=str(exc)))
