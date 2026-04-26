@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import httpx
 import typer
 from rich.console import Console
@@ -11,8 +9,6 @@ from rich.table import Table
 
 from balu_code_cli.client.http import BaluCodeHttpClient
 from balu_code_cli.config.loader import (
-    AppConfig,
-    Credentials,
     ServerCredentials,
     load_config,
     load_credentials,
