@@ -65,8 +65,21 @@ class BaluCodePlugin(PluginBase):
     def get_default_config(self) -> dict:
         return BaluCodePluginConfig().model_dump()
 
+    def get_ui_manifest(self):
+        from app.plugins.base import PluginNavItem, PluginUIManifest
+
+        return PluginUIManifest(
+            enabled=True,
+            bundle_path="ui/bundle.js",
+            nav_items=[
+                PluginNavItem(path="/", label="Balu Code", icon="code-2", order=10),
+            ],
+        )
+
     async def on_startup(self) -> None:
+        from plugin.services.config_store import load_plugin_config
         data_dir = resolve_data_dir()
+        self._config = load_plugin_config(data_dir)
         store = ProjectStore(data_dir / "store.db")
         try:
             ollama = OllamaClient(base_url=self._config.ollama_base_url)
@@ -94,6 +107,7 @@ class BaluCodePlugin(PluginBase):
             tool_registry,
             self._config,
             audit_log,
+            data_dir,
         )
 
     async def on_shutdown(self) -> None:

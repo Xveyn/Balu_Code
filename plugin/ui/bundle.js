@@ -1,0 +1,371 @@
+/**
+ * Balu Code Plugin UI — single-file React bundle.
+ * Uses window.React from the BaluHost host app. No build step.
+ */
+
+const React = window.React;
+const { useState, useEffect, useCallback } = React;
+const ce = React.createElement;
+
+const API = '/api/plugins/balu_code';
+
+async function api(path, opts = {}) {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${API}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+// ── Shared UI atoms ──────────────────────────────────────────────────────────
+
+function Card({ children, className = '' }) {
+  return ce('div', { className: `rounded-xl border border-slate-800 bg-slate-900/50 p-6 ${className}` }, children);
+}
+
+function Btn({ children, onClick, disabled, variant = 'primary' }) {
+  const base = 'px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors';
+  const styles = {
+    primary: 'bg-sky-500/20 text-sky-400 hover:bg-sky-500/30',
+    danger:  'bg-red-500/20 text-red-400 hover:bg-red-500/30',
+    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-slate-800',
+  };
+  return ce('button', { onClick, disabled, className: `${base} ${styles[variant]}` }, children);
+}
+
+function Badge({ text, ok }) {
+  const cls = ok
+    ? 'text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400'
+    : 'text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400';
+  return ce('span', { className: cls }, text);
+}
+
+function ErrorBox({ msg }) {
+  if (!msg) return null;
+  return ce('div', { className: 'p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm' }, msg);
+}
+
+function Spinner() {
+  return ce('div', { className: 'flex items-center justify-center h-32' },
+    ce('div', { className: 'animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500' })
+  );
+}
+
+// ── Models tab ───────────────────────────────────────────────────────────────
+
+function ModelsTab() {
+  const [models, setModels] = useState(null);
+  const [config, setConfig] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    Promise.all([api('/models'), api('/config')])
+      .then(([m, c]) => { setModels(m.models); setConfig(c); })
+      .catch(e => setError(e.message));
+  }, []);
+
+  if (error) return ce(ErrorBox, { msg: error });
+  if (!models) return ce(Spinner);
+
+  return ce('div', { className: 'space-y-4' },
+    ce('h2', { className: 'text-lg font-semibold text-white' }, 'Available Models'),
+    ce('p', { className: 'text-sm text-slate-400' }, 'Models available on the Ollama server. Chat and embed models are set in Config.'),
+    ce('div', { className: 'space-y-2' },
+      models.length === 0
+        ? ce('p', { className: 'text-slate-500 text-sm' }, 'No models found — is Ollama running?')
+        : models.map(m =>
+            ce(Card, { key: m.name, className: 'flex items-center justify-between py-3' },
+              ce('div', null,
+                ce('div', { className: 'text-white font-medium' }, m.name),
+                m.size ? ce('div', { className: 'text-xs text-slate-500 mt-0.5' }, `${(m.size / 1e9).toFixed(1)} GB`) : null
+              ),
+              ce('div', { className: 'flex gap-2' },
+                config?.chat_model === m.name  ? ce(Badge, { text: 'chat',  ok: true }) : null,
+                config?.embed_model === m.name ? ce(Badge, { text: 'embed', ok: true }) : null
+              )
+            )
+          )
+    )
+  );
+}
+
+// ── Projects tab ─────────────────────────────────────────────────────────────
+
+function ProjectsTab() {
+  const [projects, setProjects] = useState(null);
+  const [error, setError] = useState(null);
+  const [name, setName] = useState('');
+  const [rootPath, setRootPath] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [indexing, setIndexing] = useState({});
+
+  const load = useCallback(() => {
+    api('/projects')
+      .then(r => setProjects(r.projects))
+      .catch(e => setError(e.message));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function create() {
+    if (!name.trim() || !rootPath.trim()) return;
+    setCreating(true);
+    try {
+      await api('/projects', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), root_path: rootPath.trim(), config_yaml: null }),
+      });
+      setName(''); setRootPath('');
+      load();
+    } catch (e) { setError(e.message); }
+    finally { setCreating(false); }
+  }
+
+  async function del(id) {
+    try { await api(`/projects/${id}`, { method: 'DELETE' }); load(); }
+    catch (e) { setError(e.message); }
+  }
+
+  async function startIndex(id) {
+    setIndexing(prev => ({ ...prev, [id]: 'running' }));
+    setError(null);
+    try {
+      await api(`/index/${id}`, { method: 'POST' });
+      const poll = setInterval(async () => {
+        const s = await api(`/index/${id}/status`).catch(() => null);
+        if (!s) return;
+        if (s.status === 'done') {
+          setIndexing(prev => ({ ...prev, [id]: 'done' }));
+          clearInterval(poll);
+        } else if (s.status === 'error') {
+          setError(s.error || 'Index failed');
+          setIndexing(prev => ({ ...prev, [id]: 'error' }));
+          clearInterval(poll);
+        }
+      }, 1500);
+    } catch (e) { setError(e.message); setIndexing(prev => ({ ...prev, [id]: 'error' })); }
+  }
+
+  if (!projects) return ce(Spinner);
+
+  const inputCls = 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500 w-full';
+
+  return ce('div', { className: 'space-y-6' },
+    ce(ErrorBox, { msg: error }),
+    ce(Card, null,
+      ce('h3', { className: 'text-white font-medium mb-4' }, 'Add Project'),
+      ce('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mb-3' },
+        ce('input', { placeholder: 'Name', value: name, onChange: e => setName(e.target.value), className: inputCls }),
+        ce('input', { placeholder: '/absolute/path/to/project', value: rootPath, onChange: e => setRootPath(e.target.value), className: inputCls })
+      ),
+      ce(Btn, { onClick: create, disabled: creating || !name.trim() || !rootPath.trim() },
+        creating ? 'Creating…' : 'Create Project'
+      )
+    ),
+    projects.length === 0
+      ? ce('p', { className: 'text-slate-500 text-sm' }, 'No projects yet.')
+      : ce('div', { className: 'space-y-3' },
+          projects.map(p =>
+            ce(Card, { key: p.id, className: 'flex items-center justify-between gap-4 py-4' },
+              ce('div', { className: 'min-w-0' },
+                ce('div', { className: 'text-white font-medium truncate' }, p.name),
+                ce('div', { className: 'text-xs text-slate-500 truncate' }, p.root_path)
+              ),
+              ce('div', { className: 'flex gap-2 shrink-0' },
+                ce(Btn, {
+                  onClick: () => startIndex(p.id),
+                  disabled: indexing[p.id] === 'running',
+                  variant: 'ghost',
+                },
+                  indexing[p.id] === 'running' ? 'Indexing…'
+                  : indexing[p.id] === 'done'  ? 'Re-index'
+                  : 'Index'
+                ),
+                ce(Btn, { onClick: () => del(p.id), variant: 'danger' }, 'Delete')
+              )
+            )
+          )
+        )
+  );
+}
+
+// ── Config tab ────────────────────────────────────────────────────────────────
+
+const CONFIG_FIELDS = [
+  { key: 'ollama_base_url',           label: 'Ollama Base URL',             type: 'text' },
+  { key: 'chat_model',                label: 'Chat Model',                  type: 'text' },
+  { key: 'embed_model',               label: 'Embed Model',                 type: 'text' },
+  { key: 'context_window',            label: 'Context Window (tokens)',      type: 'number' },
+  { key: 'repo_map_budget',           label: 'Repo Map Budget (tokens)',     type: 'number' },
+  { key: 'rag_budget',                label: 'RAG Budget (tokens)',          type: 'number' },
+  { key: 'rag_top_k',                 label: 'RAG Top K',                   type: 'number' },
+  { key: 'max_iterations',            label: 'Max Iterations',              type: 'number' },
+  { key: 'max_total_tokens_per_turn', label: 'Max Total Tokens / Turn',     type: 'number' },
+  { key: 'temperature',               label: 'Temperature (0–2)',            type: 'number', step: 0.1 },
+];
+
+function ConfigTab() {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api('/config').then(setForm).catch(e => setError(e.message));
+  }, []);
+
+  function set(key, value) {
+    setForm(prev => ({ ...prev, [key]: value }));
+    setSaved(false);
+  }
+
+  async function save() {
+    setSaving(true); setError(null);
+    try {
+      const updated = await api('/config', { method: 'PUT', body: JSON.stringify(form) });
+      setForm(updated);
+      setSaved(true);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  if (!form) return ce(Spinner);
+
+  const inputCls = 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500 w-full';
+
+  return ce('div', { className: 'space-y-6' },
+    ce(ErrorBox, { msg: error }),
+    ce(Card, null,
+      ce('h3', { className: 'text-white font-medium mb-4' }, 'Plugin Configuration'),
+      ce('div', { className: 'space-y-4' },
+        CONFIG_FIELDS.map(f =>
+          ce('div', { key: f.key },
+            ce('label', { className: 'block text-sm text-slate-400 mb-1' }, f.label),
+            ce('input', {
+              type: f.type,
+              step: f.step,
+              value: form[f.key] ?? '',
+              onChange: e => set(f.key, f.type === 'number' ? Number(e.target.value) : e.target.value),
+              className: inputCls,
+            })
+          )
+        )
+      ),
+      ce('div', { className: 'flex items-center gap-3 mt-6' },
+        ce(Btn, { onClick: save, disabled: saving }, saving ? 'Saving…' : 'Save'),
+        saved ? ce('span', { className: 'text-sm text-emerald-400' }, 'Saved!') : null
+      )
+    )
+  );
+}
+
+// ── Logs tab ──────────────────────────────────────────────────────────────────
+
+function LogsTab() {
+  const [entries, setEntries] = useState(null);
+  const [error, setError] = useState(null);
+  const [limit, setLimit] = useState(100);
+
+  const load = useCallback(() => {
+    api(`/logs?limit=${limit}`)
+      .then(r => setEntries(r.entries))
+      .catch(e => setError(e.message));
+  }, [limit]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (error) return ce(ErrorBox, { msg: error });
+  if (!entries) return ce(Spinner);
+
+  function fmt(ts) {
+    try { return new Date(ts).toLocaleString(); } catch { return ts; }
+  }
+
+  return ce('div', { className: 'space-y-4' },
+    ce('div', { className: 'flex items-center justify-between' },
+      ce('h2', { className: 'text-lg font-semibold text-white' }, 'Audit Log'),
+      ce('div', { className: 'flex items-center gap-2' },
+        ce('label', { className: 'text-sm text-slate-400' }, 'Limit'),
+        ce('select', {
+          value: limit,
+          onChange: e => setLimit(Number(e.target.value)),
+          className: 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-2 py-1',
+        },
+          [25, 50, 100, 200, 500].map(n => ce('option', { key: n, value: n }, n))
+        ),
+        ce(Btn, { onClick: load, variant: 'ghost' }, 'Refresh')
+      )
+    ),
+    entries.length === 0
+      ? ce('p', { className: 'text-slate-500 text-sm' }, 'No tool calls recorded yet.')
+      : ce('div', { className: 'overflow-x-auto' },
+          ce('table', { className: 'w-full text-sm' },
+            ce('thead', null,
+              ce('tr', { className: 'text-left text-slate-500 border-b border-slate-800' },
+                ['Time', 'User', 'Action', 'Resource', 'Status'].map(h =>
+                  ce('th', { key: h, className: 'py-2 pr-4 font-medium' }, h)
+                )
+              )
+            ),
+            ce('tbody', null,
+              entries.map(e =>
+                ce('tr', { key: e.id, className: 'border-b border-slate-800/50 hover:bg-slate-800/30' },
+                  ce('td', { className: 'py-2 pr-4 text-slate-400 whitespace-nowrap' }, fmt(e.timestamp)),
+                  ce('td', { className: 'py-2 pr-4 text-slate-300' }, e.user ?? '—'),
+                  ce('td', { className: 'py-2 pr-4 text-white font-mono text-xs' }, e.action),
+                  ce('td', { className: 'py-2 pr-4 text-slate-400 max-w-xs truncate' }, e.resource ?? '—'),
+                  ce('td', { className: 'py-2' },
+                    ce('span', {
+                      className: e.success
+                        ? 'text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400'
+                        : 'text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400',
+                    }, e.success ? 'ok' : 'error')
+                  )
+                )
+              )
+            )
+          )
+        )
+  );
+}
+
+// ── Main shell ────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 'models',   label: 'Models' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'config',   label: 'Config' },
+  { id: 'logs',     label: 'Logs' },
+];
+
+function BaluCode({ user }) {
+  const [tab, setTab] = useState('models');
+
+  const content = {
+    models:   ce(ModelsTab),
+    projects: ce(ProjectsTab),
+    config:   ce(ConfigTab),
+    logs:     ce(LogsTab),
+  };
+
+  return ce('div', { className: 'space-y-6' },
+    ce('div', { className: 'flex gap-1 border-b border-slate-800 pb-0' },
+      TABS.map(t =>
+        ce('button', {
+          key: t.id,
+          onClick: () => setTab(t.id),
+          className: `px-4 py-2 text-sm font-medium transition-colors ${
+            tab === t.id
+              ? 'text-sky-400 border-b-2 border-sky-400 -mb-px'
+              : 'text-slate-400 hover:text-slate-200'
+          }`,
+        }, t.label)
+      )
+    ),
+    ce('div', null, content[tab])
+  );
+}
+
+export default BaluCode;

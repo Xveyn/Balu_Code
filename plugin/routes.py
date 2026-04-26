@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import uuid
 from pathlib import Path
 
 from app.api.deps import get_current_user
@@ -22,25 +23,29 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from plugin.config import BaluCodePluginConfig
 from plugin.deps import (
     get_audit_log,
+    get_data_dir,
     get_index_job_tracker,
     get_ollama_client,
     get_plugin_config,
     get_project_store,
     get_rag_registry,
     get_tool_registry,
+    update_plugin_config,
 )
 from plugin.schemas import (
+    ConfigUpdateRequest,
     IndexJobResponse,
     IndexStatusResponse,
+    LogEntry,
+    LogsResponse,
     ModelsResponse,
     ProjectCreate,
     ProjectsResponse,
     RepoMapResponse,
 )
-import uuid
-
 from plugin.services.agent_loop import TurnContext, TurnDeps, run_turn
 from plugin.services.cancel import CancelToken
+from plugin.services.config_store import save_plugin_config
 from plugin.services.index_jobs import (
     AlreadyIndexingError,
     IndexJob,
@@ -79,6 +84,36 @@ def build_router() -> APIRouter:
             "plugin": _MANIFEST["name"],
             "version": _MANIFEST["version"],
         }
+
+    @router.get("/config", response_model=BaluCodePluginConfig, tags=["balu_code"])
+    async def get_config_route(
+        _user: UserPublic = Depends(get_current_user),
+        config: BaluCodePluginConfig = Depends(get_plugin_config),
+    ) -> BaluCodePluginConfig:
+        return config
+
+    @router.put("/config", response_model=BaluCodePluginConfig, tags=["balu_code"])
+    async def put_config_route(
+        body: ConfigUpdateRequest,
+        _user: UserPublic = Depends(get_current_user),
+        config: BaluCodePluginConfig = Depends(get_plugin_config),
+        data_dir: Path = Depends(get_data_dir),
+    ) -> BaluCodePluginConfig:
+        merged = config.model_dump()
+        merged.update(body.model_dump(exclude_none=True))
+        new_config = BaluCodePluginConfig.model_validate(merged)
+        await asyncio.to_thread(save_plugin_config, new_config, data_dir)
+        update_plugin_config(new_config)
+        return new_config
+
+    @router.get("/logs", response_model=LogsResponse, tags=["balu_code"])
+    async def get_logs_route(
+        limit: int = Query(default=100, ge=1, le=500),
+        _user: UserPublic = Depends(get_current_user),
+        audit_log=Depends(get_audit_log),
+    ) -> LogsResponse:
+        raw = await audit_log.query_recent_tool_calls(limit)
+        return LogsResponse(entries=[LogEntry.model_validate(d) for d in raw])
 
     @router.post(
         "/projects",
