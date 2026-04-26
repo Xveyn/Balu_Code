@@ -18,10 +18,10 @@ app = typer.Typer(
     help="Balu Code — self-hosted coding agent.",
 )
 app.add_typer(auth_app, name="auth")
-app.add_typer(chat_app, name="chat")
 app.add_typer(init_app, name="init")
 app.add_typer(models_app, name="models")
 app.add_typer(index_app, name="index")
+app.add_typer(chat_app, name="chat")
 
 
 def _version_callback(value: bool) -> None:
