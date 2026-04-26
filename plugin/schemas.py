@@ -68,10 +68,28 @@ class ConfigUpdateRequest(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
 
 
+class LogEntry(BaseModel):
+    id: int
+    timestamp: str
+    user: str | None
+    action: str
+    resource: str | None
+    success: bool
+    error_message: str | None = None
+    turn_id: str | None = None
+    tool_call_id: str | None = None
+
+
+class LogsResponse(BaseModel):
+    entries: list[LogEntry]
+
+
 __all__ = [
     "ConfigUpdateRequest",
     "IndexJobResponse",
     "IndexStatusResponse",
+    "LogEntry",
+    "LogsResponse",
     "ModelsResponse",
     "ProjectCreate",
     "ProjectsResponse",

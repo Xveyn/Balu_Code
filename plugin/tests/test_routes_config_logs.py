@@ -73,3 +73,25 @@ def test_put_config_rejects_invalid_temperature(tmp_path):
     client = TestClient(_make_app(tmp_path))
     r = client.put("/api/plugins/balu_code/config", json={"temperature": 5.0})
     assert r.status_code == 422
+
+
+def test_get_logs_returns_entries(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/logs")
+    assert r.status_code == 200
+    body = r.json()
+    assert "entries" in body
+    assert len(body["entries"]) == 1
+    assert body["entries"][0]["action"] == "tool:read_file"
+
+
+def test_get_logs_respects_limit(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/logs?limit=50")
+    assert r.status_code == 200
+
+
+def test_get_logs_rejects_excessive_limit(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/logs?limit=501")
+    assert r.status_code == 422

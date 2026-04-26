@@ -36,6 +36,8 @@ from plugin.schemas import (
     ConfigUpdateRequest,
     IndexJobResponse,
     IndexStatusResponse,
+    LogEntry,
+    LogsResponse,
     ModelsResponse,
     ProjectCreate,
     ProjectsResponse,
@@ -103,6 +105,15 @@ def build_router() -> APIRouter:
         await asyncio.to_thread(save_plugin_config, new_config, data_dir)
         update_plugin_config(new_config)
         return new_config
+
+    @router.get("/logs", response_model=LogsResponse, tags=["balu_code"])
+    async def get_logs_route(
+        limit: int = Query(default=100, ge=1, le=500),
+        _user: UserPublic = Depends(get_current_user),
+        audit_log=Depends(get_audit_log),
+    ) -> LogsResponse:
+        raw = await audit_log.query_recent_tool_calls(limit)
+        return LogsResponse(entries=[LogEntry.model_validate(d) for d in raw])
 
     @router.post(
         "/projects",
