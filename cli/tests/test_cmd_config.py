@@ -3,11 +3,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-from typer.testing import CliRunner
-
 from balu_code_cli.commands.config import app
-from balu_code_cli.config.loader import AppConfig, save_config
+from balu_code_cli.config.loader import AppConfig
+from typer.testing import CliRunner
 
 runner = CliRunner()
 

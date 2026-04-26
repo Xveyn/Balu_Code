@@ -60,12 +60,12 @@ class RunBashTool:
 
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=args.timeout_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             timed_out = True
             _kill_process_group(proc)
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_GRACE_S)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 stdout, _ = await proc.communicate()
         finally:

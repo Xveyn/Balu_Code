@@ -1,13 +1,11 @@
 """Tests for client/ws.py — real local websockets server."""
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
 import websockets
-
-from balu_code_cli.client.ws import BaluCodeWS, connect
+from balu_code_cli.client.ws import connect
 
 
 async def _make_server(handler):

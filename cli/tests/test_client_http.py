@@ -4,7 +4,6 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-
 from balu_code_cli.client.http import BaluCodeHttpClient
 
 BASE = "https://balu.example.com/api/plugins/balu_code"

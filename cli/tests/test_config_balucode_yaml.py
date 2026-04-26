@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from balu_code_cli.config.balucode_yaml import (
     BaluCodeYaml,
     find_balucode_yaml,

@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import httpx
 import respx
-from typer.testing import CliRunner
-
 from balu_code_cli.__main__ import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 BASE = "https://balu.example.com/api/plugins/balu_code"
@@ -13,9 +12,17 @@ BASE = "https://balu.example.com/api/plugins/balu_code"
 
 def _setup(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    import importlib, balu_code_cli.config.paths as p
+    import importlib
+
+    import balu_code_cli.config.paths as p
     importlib.reload(p)
-    from balu_code_cli.config.loader import AppConfig, Credentials, ServerCredentials, save_config, save_credentials
+    from balu_code_cli.config.loader import (
+        AppConfig,
+        Credentials,
+        ServerCredentials,
+        save_config,
+        save_credentials,
+    )
     save_config(AppConfig(server_url="https://balu.example.com"), p.config_yaml())
     save_credentials(
         Credentials(servers={"https://balu.example.com": ServerCredentials(api_key="bc_key")}),
