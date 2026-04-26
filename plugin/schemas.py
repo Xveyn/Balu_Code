@@ -47,7 +47,7 @@ class IndexStatusResponse(BaseModel):
     status: JobStatus
     files_total: int
     files_processed: int
-    chunks_total: int
+    chunks_total: int  # chunks upserted in this run, not total chunks in the index
     error: str | None = None
     started_at: str | None = None
     finished_at: str | None = None

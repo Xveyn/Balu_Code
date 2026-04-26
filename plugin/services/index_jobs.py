@@ -46,6 +46,7 @@ def _now_iso() -> str:
 
 
 _LIVE = {JobStatus.QUEUED, JobStatus.RUNNING}
+_MAX_FINISHED_JOBS = 50
 
 
 class IndexJobTracker:
@@ -88,6 +89,16 @@ class IndexJobTracker:
         finally:
             if job.finished_at is None:
                 job.finished_at = _now_iso()
+            self._purge()
+
+    def _purge(self) -> None:
+        """Cancel done asyncio tasks and cap finished-job history."""
+        done_task_ids = [jid for jid, t in self._tasks.items() if t.done()]
+        for jid in done_task_ids:
+            del self._tasks[jid]
+        finished = [jid for jid, j in self._jobs.items() if j.status not in _LIVE]
+        for jid in finished[:-_MAX_FINISHED_JOBS]:
+            self._jobs.pop(jid)
 
     def get_job(self, job_id: str) -> IndexJob | None:
         return self._jobs.get(job_id)
