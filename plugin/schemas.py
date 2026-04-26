@@ -85,14 +85,42 @@ class LogsResponse(BaseModel):
     entries: list[LogEntry]
 
 
+class LoadedModel(BaseModel):
+    name: str
+    size_vram: int
+    context_length: int | None = None
+
+
+class OllamaSystemInfo(BaseModel):
+    reachable: bool
+    loaded_models: list[LoadedModel] = []
+
+
+class GpuInfo(BaseModel):
+    available: bool
+    backend: str | None = None
+    utilization_pct: int | None = None
+    vram_used_bytes: int | None = None
+    vram_total_bytes: int | None = None
+
+
+class SystemResponse(BaseModel):
+    ollama: OllamaSystemInfo
+    gpu: GpuInfo
+
+
 __all__ = [
     "ConfigUpdateRequest",
+    "GpuInfo",
     "IndexJobResponse",
     "IndexStatusResponse",
+    "LoadedModel",
     "LogEntry",
     "LogsResponse",
     "ModelsResponse",
+    "OllamaSystemInfo",
     "ProjectCreate",
     "ProjectsResponse",
     "RepoMapResponse",
+    "SystemResponse",
 ]

@@ -37,14 +37,18 @@ from .deps import (
 )
 from .schemas import (
     ConfigUpdateRequest,
+    GpuInfo,
     IndexJobResponse,
     IndexStatusResponse,
+    LoadedModel,
     LogEntry,
     LogsResponse,
     ModelsResponse,
+    OllamaSystemInfo,
     ProjectCreate,
     ProjectsResponse,
     RepoMapResponse,
+    SystemResponse,
 )
 from .services.agent_loop import TurnContext, TurnDeps, run_turn
 from .services.cancel import CancelToken
@@ -70,6 +74,7 @@ from .services.project_store import (
 from .services.rag_index import RagIndexUnavailable
 from .services.rag_registry import RagRegistry
 from .services.repo_map import ProjectRootNotAccessible, RepoMap
+from .services.system import get_gpu_info
 from .services.tools import ToolRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
@@ -155,6 +160,20 @@ def build_router() -> APIRouter:
         raw = await audit_log.query_recent_tool_calls(limit)
         return LogsResponse(entries=[LogEntry.model_validate(d) for d in raw])
 
+    @router.get("/system", response_model=SystemResponse, tags=["balu_code"])
+    async def get_system_route(
+        _user: UserPublic = Depends(get_current_user),
+        ollama: OllamaClient = Depends(get_ollama_client),
+    ) -> SystemResponse:
+        loaded_raw, gpu_raw = await asyncio.gather(
+            ollama.ps(),
+            asyncio.to_thread(get_gpu_info),
+        )
+        loaded = [LoadedModel(**m) for m in loaded_raw]
+        ollama_info = OllamaSystemInfo(reachable=True, loaded_models=loaded)
+        gpu_info = GpuInfo(available=False) if gpu_raw is None else GpuInfo(**gpu_raw)
+        return SystemResponse(ollama=ollama_info, gpu=gpu_info)
+
     @router.post(
         "/projects",
         response_model=Project,
@@ -206,6 +225,7 @@ def build_router() -> APIRouter:
     @router.delete(
         "/projects/{project_id}",
         status_code=status.HTTP_204_NO_CONTENT,
+        response_model=None,
         tags=["balu_code"],
     )
     async def delete_project(
