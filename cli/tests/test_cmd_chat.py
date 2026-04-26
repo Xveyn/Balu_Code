@@ -113,7 +113,7 @@ async def test_run_chat_displays_tool_call(capsys):
 
 
 @pytest.mark.asyncio
-async def test_yolo_auto_approves_without_prompt(capsys):
+async def test_yolo_auto_approves(capsys):
     events = [
         {"type": "turn_start", "turn_id": "t_1", "model": "llama3", "context_tokens": 5},
         {"type": "approval_request", "tool_call_id": "tc_1",
@@ -139,7 +139,7 @@ async def test_yolo_auto_approves_without_prompt(capsys):
 
 
 @pytest.mark.asyncio
-async def test_balucode_yaml_allow_write_auto_approves(capsys):
+async def test_balucode_allow_auto_approves(capsys):
     from balu_code_cli.config.balucode_yaml import ToolsConfig
     balucode = BaluCodeYaml(project_id=1, server_url="https://x.com",
                             tools=ToolsConfig(allow_write=True))
@@ -168,7 +168,7 @@ async def test_balucode_yaml_allow_write_auto_approves(capsys):
 
 
 @pytest.mark.asyncio
-async def test_stored_permission_yes_auto_approves(tmp_path):
+async def test_stored_yes_auto_approves(tmp_path):
     from balu_code_cli.config.permissions import PermissionsStore, save_permissions
     store = PermissionsStore()
     store.set("https://x.com", 1, "run_bash", True)
@@ -202,7 +202,7 @@ async def test_stored_permission_yes_auto_approves(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_interactive_y_approves_and_n_denies(tmp_path):
+async def test_interactive_y_approves_once(tmp_path):
     from balu_code_cli.config.permissions import PermissionsStore, load_permissions
     perms_path = tmp_path / "perms.yaml"
 
@@ -238,7 +238,7 @@ async def test_interactive_y_approves_and_n_denies(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_interactive_Y_always_persists(tmp_path):
+async def test_interactive_Y_approves_always(tmp_path):
     from balu_code_cli.config.permissions import load_permissions
     perms_path = tmp_path / "perms.yaml"
 
@@ -270,3 +270,80 @@ async def test_interactive_Y_always_persists(tmp_path):
     ws.send_approval.assert_called_once_with("tc_5", approved=True, reason=None)
     store = load_permissions(perms_path)
     assert store.lookup("https://x.com", 1, "write_file") is True
+
+
+@pytest.mark.asyncio
+async def test_stored_no_auto_denies(tmp_path):
+    from balu_code_cli.config.permissions import PermissionsStore, save_permissions
+
+    store = PermissionsStore()
+    store.set("https://x.com", 1, "run_bash", False)
+    perms_path = tmp_path / "perms.yaml"
+    save_permissions(store, perms_path)
+
+    events = [
+        {"type": "turn_start", "turn_id": "t_1", "model": "llama3", "context_tokens": 5},
+        {"type": "approval_request", "tool_call_id": "tc_6",
+         "tool": "run_bash", "args": {"command": "rm -rf /"}, "risk": "exec"},
+        {"type": "turn_end", "turn_id": "t_1", "total_tokens": 5, "iterations": 1, "stop_reason": "done"},
+    ]
+    ws = _make_fake_ws(events)
+    balucode = BaluCodeYaml(project_id=1, server_url="https://x.com")
+
+    approval_prompt_calls: list[str] = []
+    inputs = asyncio.Queue()
+    await inputs.put("go")
+    await inputs.put(EOFError())
+
+    async def fake_input(_p=""):
+        # The REPL prompts with "[balu-code] > "; approval prompts contain "Allow?"
+        if "Allow?" in _p:
+            approval_prompt_calls.append(_p)
+            raise AssertionError("input_fn should not be called for approval when stored=False")
+        item = await inputs.get()
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    await run_chat(
+        balucode=balucode, api_key="key", yolo=False, project_id=1,
+        ws_factory=_make_ws_factory(ws), input_fn=fake_input,
+        perms_path=perms_path,
+    )
+    assert approval_prompt_calls == [], "input_fn was called for approval despite stored=False"
+    ws.send_approval.assert_called_once_with("tc_6", approved=False, reason=None)
+
+
+@pytest.mark.asyncio
+async def test_interactive_N_denies_always(tmp_path):
+    from balu_code_cli.config.permissions import load_permissions
+    perms_path = tmp_path / "perms.yaml"
+
+    events = [
+        {"type": "turn_start", "turn_id": "t_1", "model": "llama3", "context_tokens": 5},
+        {"type": "approval_request", "tool_call_id": "tc_7",
+         "tool": "write_file", "args": {"path": "b.py"}, "risk": "write"},
+        {"type": "turn_end", "turn_id": "t_1", "total_tokens": 5, "iterations": 1, "stop_reason": "done"},
+    ]
+    ws = _make_fake_ws(events)
+    balucode = BaluCodeYaml(project_id=1, server_url="https://x.com")
+
+    user_inputs = asyncio.Queue()
+    await user_inputs.put("go")
+    await user_inputs.put("N")   # deny always
+    await user_inputs.put(EOFError())
+
+    async def fake_input(_p=""):
+        item = await user_inputs.get()
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    await run_chat(
+        balucode=balucode, api_key="key", yolo=False, project_id=1,
+        ws_factory=_make_ws_factory(ws), input_fn=fake_input,
+        perms_path=perms_path,
+    )
+    ws.send_approval.assert_called_once_with("tc_7", approved=False, reason=None)
+    store = load_permissions(perms_path)
+    assert store.lookup("https://x.com", 1, "write_file") is False
