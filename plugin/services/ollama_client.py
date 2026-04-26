@@ -129,6 +129,28 @@ class OllamaClient:
                 raise OllamaUnreachable(f"malformed entry in /api/tags response: {exc}") from exc
         return result
 
+    async def ps(self) -> list[dict]:
+        """Return currently loaded models from /api/ps.
+
+        Returns empty list if Ollama is unreachable instead of raising.
+        """
+        try:
+            response = await self._request_with_retry("GET", "/api/ps")
+        except OllamaError:
+            return []
+        try:
+            payload: Any = response.json()
+        except (json.JSONDecodeError, ValueError):
+            return []
+        result = []
+        for entry in payload.get("models", []):
+            result.append({
+                "name": entry.get("name", ""),
+                "size_vram": entry.get("size_vram", 0),
+                "context_length": entry.get("context_length"),
+            })
+        return result
+
     async def embed(self, model: str, texts: list[str]) -> list[list[float]]:
         """Embed one or more texts via Ollama /api/embeddings.
 
