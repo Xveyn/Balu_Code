@@ -14,7 +14,7 @@ from pathlib import Path
 
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
-from balu_code_shared.events import Error, UserMessage, parse_frame
+from balu_code_shared.events import Approval, Cancel, Error, UserMessage, parse_frame
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 from starlette.websockets import WebSocket, WebSocketDisconnect
@@ -288,7 +288,7 @@ def build_router() -> APIRouter:
     async def chat_socket(
         websocket: WebSocket,
         project_id: int,
-        _user: UserPublic = Depends(get_current_user),
+        user: UserPublic = Depends(get_current_user),
         store: ProjectStore = Depends(get_project_store),
         ollama: OllamaClient = Depends(get_ollama_client),
         rag_registry: RagRegistry = Depends(get_rag_registry),
@@ -330,6 +330,9 @@ def build_router() -> APIRouter:
         async def _emit(event) -> None:
             await websocket.send_json(event.model_dump())
 
+        _turn_task: asyncio.Task | None = None
+        _turn_ctx: TurnContext | None = None
+
         try:
             while True:
                 raw = await websocket.receive_json()
@@ -338,22 +341,52 @@ def build_router() -> APIRouter:
                 except ValidationError as exc:
                     await _emit(Error(code="bad_frame", message=str(exc)[:200]))
                     continue
+
                 if isinstance(frame, UserMessage):
-                    turn_ctx = TurnContext(
+                    if _turn_task is not None and not _turn_task.done():
+                        await _emit(Error(code="turn_in_flight", message="a turn is already running"))
+                        continue
+                    ctx = TurnContext(
                         turn_id=f"t_{uuid.uuid4().hex[:12]}",
                         cancel_token=CancelToken(),
                         pending_approvals={},
-                        username=_user.username,
+                        username=user.username,
                     )
-                    await run_turn(frame.content, history, deps, _emit, turn_ctx)
-                else:
-                    await _emit(
-                        Error(
-                            code="unsupported_frame",
-                            message=f"frame type '{frame.type}' is not supported in 4a",
-                        )
+                    _turn_ctx = ctx
+                    _turn_task = asyncio.create_task(
+                        run_turn(frame.content, history, deps, _emit, ctx)
                     )
+                    continue
+
+                if isinstance(frame, Approval):
+                    fut = (_turn_ctx.pending_approvals.pop(frame.tool_call_id, None)
+                           if _turn_ctx is not None else None)
+                    if fut is None:
+                        await _emit(Error(
+                            code="unknown_approval",
+                            message=f"no pending request for {frame.tool_call_id}",
+                        ))
+                    elif not fut.done():
+                        fut.set_result(frame)
+                    continue
+
+                if isinstance(frame, Cancel):
+                    if _turn_ctx is None or frame.turn_id != _turn_ctx.turn_id:
+                        await _emit(Error(code="no_turn_to_cancel", message="no matching turn in flight"))
+                        continue
+                    _turn_ctx.cancel_token.cancel()
+                    for fut in list(_turn_ctx.pending_approvals.values()):
+                        if not fut.done():
+                            fut.cancel()
+                    continue
+
+                await _emit(Error(
+                    code="unsupported_frame",
+                    message=f"frame type '{frame.type}' is not supported",
+                ))
         except WebSocketDisconnect:
+            if _turn_task is not None and not _turn_task.done():
+                _turn_task.cancel()
             return
 
     return router

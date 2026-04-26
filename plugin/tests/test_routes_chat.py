@@ -21,7 +21,8 @@ from plugin.deps import (
 )
 from plugin.services.index_jobs import IndexJobTracker
 from plugin.services.project_store import ProjectStore
-from plugin.services.tools import default_registry
+from plugin.services.tools import ToolRegistry, default_registry
+from plugin.services.tools.base import ToolResult
 
 
 class _NoopAuditLogger:
@@ -58,6 +59,29 @@ class _FakeRagRegistry:
 
     async def close_all(self):
         pass
+
+
+from pydantic import BaseModel as _BaseModel
+
+
+class _EchoArgs(_BaseModel):
+    msg: str
+
+
+class _EchoWriteTool:
+    name = "echo"
+    description = "echo a message"
+    risk = "write"
+    args_schema = _EchoArgs
+
+    async def execute(self, args: _EchoArgs, ctx) -> ToolResult:
+        return ToolResult(status="ok", text=f"echoed: {args.msg}", bytes_out=len(args.msg))
+
+
+def _registry_with_echo() -> ToolRegistry:
+    reg = ToolRegistry()
+    reg.register(_EchoWriteTool())
+    return reg
 
 
 @pytest.fixture
@@ -190,3 +214,59 @@ def test_chat_unsupported_frame_yields_error_and_stays_open(tmp_path, store):
         ws.send_json({"type": "approval", "tool_call_id": "tc_x", "approved": True})
         ev = ws.receive_json()
         assert ev["type"] == "error"
+
+
+def test_chat_approval_resolves_write_tool(tmp_path, store):
+    (tmp_path / "f.py").write_text("x\n")
+    pid = _make_project(store, str(tmp_path))
+    _tool_call = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
+    ollama = _FakeOllama([
+        [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
+        [{"message": {"content": "all done", "tool_calls": None}, "done": True}],
+    ])
+    c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig())
+    with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+        ws.send_json({"type": "user_message", "content": "write something"})
+        tc_id = None
+        while True:
+            ev = ws.receive_json()
+            if ev["type"] == "approval_request":
+                tc_id = ev["tool_call_id"]
+                break
+            if ev["type"] == "turn_end":
+                break
+        assert tc_id is not None, "expected approval_request before turn_end"
+        ws.send_json({"type": "approval", "tool_call_id": tc_id, "approved": True})
+        while True:
+            ev = ws.receive_json()
+            if ev["type"] == "turn_end":
+                assert ev["stop_reason"] == "done"
+                break
+
+
+def test_chat_cancel_at_approval_gate_stops_turn(tmp_path, store):
+    (tmp_path / "f.py").write_text("x\n")
+    pid = _make_project(store, str(tmp_path))
+    _tool_call = [{"function": {"name": "echo", "arguments": {"msg": "hi"}}}]
+    ollama = _FakeOllama([
+        [{"message": {"content": "", "tool_calls": _tool_call}, "done": True}],
+    ])
+    c = _client(store, ollama, _FakeRagRegistry(), _registry_with_echo(), BaluCodePluginConfig())
+    with c.websocket_connect(f"/api/plugins/balu_code/chat?project_id={pid}") as ws:
+        ws.send_json({"type": "user_message", "content": "write something"})
+        turn_id = None
+        while True:
+            ev = ws.receive_json()
+            if ev["type"] == "turn_start":
+                turn_id = ev["turn_id"]
+            if ev["type"] == "approval_request":
+                break
+            if ev["type"] == "turn_end":
+                break
+        assert turn_id is not None
+        ws.send_json({"type": "cancel", "turn_id": turn_id})
+        while True:
+            ev = ws.receive_json()
+            if ev["type"] == "turn_end":
+                assert ev["stop_reason"] == "cancelled"
+                break
