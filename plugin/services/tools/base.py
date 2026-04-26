@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from plugin.services.cancel import CancelToken
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ToolContext:
     project_root: Path
     project_id: int
