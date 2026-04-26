@@ -33,7 +33,6 @@ class SessionWriter:
             "ts": datetime.now(UTC).isoformat(),
             "payload": payload,
         })
-        assert self._fh is not None
         self._fh.write(line + "\n")
         self._fh.flush()
 
@@ -42,6 +41,12 @@ class SessionWriter:
 
     def write_event(self, event: Any) -> None:
         self._write("in", _event_to_dict(event))
+
+    def __enter__(self) -> SessionWriter:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     def close(self) -> None:
         if self._fh is not None:

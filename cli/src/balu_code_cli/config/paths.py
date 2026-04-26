@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -25,7 +26,6 @@ def permissions_yaml() -> Path:
 
 
 def sessions_dir(server_url: str, project_id: int) -> Path:
-    import hashlib
     key = f"{server_url}:{project_id}".encode()
     h = hashlib.sha1(key, usedforsecurity=False).hexdigest()[:16]
     xdg = os.environ.get("XDG_DATA_HOME") or None

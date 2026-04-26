@@ -38,8 +38,8 @@ def test_sessions_dir_different_project_different_hash():
 
 def test_write_sent_creates_file(tmp_path):
     path = tmp_path / "session.jsonl"
-    w = SessionWriter(path)
-    w.write_sent({"type": "user_message", "content": "hello"})
+    with SessionWriter(path) as w:
+        w.write_sent({"type": "user_message", "content": "hello"})
     assert path.exists()
     line = json.loads(path.read_text().strip())
     assert line["direction"] == "out"
@@ -49,14 +49,14 @@ def test_write_sent_creates_file(tmp_path):
 
 def test_write_event_appends_line(tmp_path):
     path = tmp_path / "session.jsonl"
-    w = SessionWriter(path)
 
     class FakeEvent:
         def model_dump(self):
             return {"type": "token", "content": "hello"}
 
-    w.write_event(FakeEvent())
-    w.write_event(FakeEvent())
+    with SessionWriter(path) as w:
+        w.write_event(FakeEvent())
+        w.write_event(FakeEvent())
     lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     assert len(lines) == 2
     assert all(l["direction"] == "in" for l in lines)
@@ -64,15 +64,15 @@ def test_write_event_appends_line(tmp_path):
 
 def test_written_lines_are_valid_json(tmp_path):
     path = tmp_path / "session.jsonl"
-    w = SessionWriter(path)
-    w.write_sent({"type": "user_message", "content": "test"})
 
     class FakeEvent:
         def model_dump(self):
             return {"type": "turn_end", "turn_id": "t1", "total_tokens": 50,
                     "iterations": 1, "stop_reason": "done"}
 
-    w.write_event(FakeEvent())
+    with SessionWriter(path) as w:
+        w.write_sent({"type": "user_message", "content": "test"})
+        w.write_event(FakeEvent())
     for line in path.read_text().splitlines():
         obj = json.loads(line)
         assert "direction" in obj
