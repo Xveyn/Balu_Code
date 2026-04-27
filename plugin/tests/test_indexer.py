@@ -100,3 +100,43 @@ async def test_empty_project_root_completes_with_zero(tmp_path, index):
     await run_index_job(job, project_root=tmp_path, rag=index)
     assert job.files_processed == 0
     assert job.status == JobStatus.DONE
+
+
+async def test_indexes_js_file(tmp_path, index):
+    _write(tmp_path, "app.js", "function hello() { return 'hi'; }\n")
+    job = IndexJob(id="j1", project_id=1, status=JobStatus.QUEUED)
+    await run_index_job(job, project_root=tmp_path, rag=index)
+    assert job.status == JobStatus.DONE
+    assert job.files_processed == 1
+    assert "app.js" in await index.all_indexed_paths()
+
+
+async def test_indexes_ts_file(tmp_path, index):
+    _write(
+        tmp_path,
+        "utils.ts",
+        "export function add(a: number, b: number): number { return a + b; }\n",
+    )
+    job = IndexJob(id="j1", project_id=1, status=JobStatus.QUEUED)
+    await run_index_job(job, project_root=tmp_path, rag=index)
+    assert job.files_processed == 1
+    assert "utils.ts" in await index.all_indexed_paths()
+
+
+async def test_indexes_tsx_file(tmp_path, index):
+    _write(tmp_path, "App.tsx", "export default function App() { return null; }\n")
+    job = IndexJob(id="j1", project_id=1, status=JobStatus.QUEUED)
+    await run_index_job(job, project_root=tmp_path, rag=index)
+    assert job.files_processed == 1
+    assert "App.tsx" in await index.all_indexed_paths()
+
+
+async def test_indexes_mixed_py_ts_directory(tmp_path, index):
+    _write(tmp_path, "main.py", "def run(): pass\n")
+    _write(tmp_path, "utils.ts", "export const PI = 3.14;\n")
+    _write(tmp_path, "App.tsx", "export default function App() { return null; }\n")
+    job = IndexJob(id="j1", project_id=1, status=JobStatus.QUEUED)
+    await run_index_job(job, project_root=tmp_path, rag=index)
+    assert job.files_processed == 3
+    paths = await index.all_indexed_paths()
+    assert {"main.py", "utils.ts", "App.tsx"} <= paths

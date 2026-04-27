@@ -2,9 +2,11 @@
 
 Called by ``IndexJobTracker.start_job`` with an ``IndexJob`` that the
 worker mutates as it progresses. Walks the project root, compares each
-``.py`` file's sha1 against the cached sha1 in ``RagIndex``, chunks +
+source file's sha1 against the cached sha1 in ``RagIndex``, chunks +
 embeds + upserts changed files, and drops stale cache rows for deleted
 files.
+
+Supported extensions: .py, .js, .ts, .jsx, .tsx
 """
 
 from __future__ import annotations
@@ -14,9 +16,11 @@ import os
 from pathlib import Path
 
 from .index_jobs import IndexJob, JobStatus
-from .rag_chunker import chunk_python_file
+from .rag_chunker import chunk_js_ts_file, chunk_python_file
 from .rag_index import RagIndex
 from .repo_map import IGNORE_DIRS
+
+_SOURCE_EXTENSIONS = frozenset({".py", ".js", ".ts", ".jsx", ".tsx"})
 
 
 async def run_index_job(
@@ -31,11 +35,9 @@ async def run_index_job(
     seen_paths: set[str] = set()
     files_to_process: list[tuple[str, bytes, str]] = []
 
-    for fs_path, rel_posix in _iter_python_files(project_root):
+    for fs_path, rel_posix in _iter_source_files(project_root):
         seen_paths.add(rel_posix)
         content_bytes = fs_path.read_bytes()
-        if not content_bytes.strip():
-            continue  # empty / whitespace-only files produce no chunks; skip them
         sha1 = hashlib.sha1(content_bytes, usedforsecurity=False).hexdigest()
         cached = await rag.get_file_sha1(rel_posix)
         if cached == sha1:
@@ -45,7 +47,11 @@ async def run_index_job(
     job.files_total = len(files_to_process)
 
     for rel_posix, content_bytes, sha1 in files_to_process:
-        chunks = chunk_python_file(rel_posix, content_bytes)
+        ext = Path(rel_posix).suffix
+        if ext == ".py":
+            chunks = chunk_python_file(rel_posix, content_bytes)
+        else:
+            chunks = chunk_js_ts_file(rel_posix, content_bytes, ext)
         await rag.upsert_file_chunks(rel_posix, sha1, chunks)
         job.files_processed += 1
         job.chunks_total += len(chunks)
@@ -57,13 +63,13 @@ async def run_index_job(
     job.status = JobStatus.DONE
 
 
-def _iter_python_files(project_root: Path):
-    """Yield (fs_path, rel_posix) for every .py file under project_root, pruning IGNORE_DIRS."""
+def _iter_source_files(project_root: Path):
+    """Yield (fs_path, rel_posix) for every supported source file under project_root."""
     for dirpath_str, dirnames, filenames in os.walk(project_root):
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
         dirpath = Path(dirpath_str)
         for fname in filenames:
-            if not fname.endswith(".py"):
+            if Path(fname).suffix not in _SOURCE_EXTENSIONS:
                 continue
             fs_path = dirpath / fname
             if not fs_path.is_file():
