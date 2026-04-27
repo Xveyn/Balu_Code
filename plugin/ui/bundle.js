@@ -429,7 +429,7 @@ function SystemTab() {
                 ce('div', null,
                   ce('div', { className: 'text-white text-sm' }, m.name),
                   ce('div', { className: 'text-xs text-slate-500' },
-                    `${(m.size_vram / 1e9).toFixed(1)} GB VRAM` +
+                    (m.size_vram != null ? `${(m.size_vram / 1e9).toFixed(1)} GB VRAM` : 'CPU') +
                     (m.context_length ? ` · ${m.context_length.toLocaleString()} ctx` : '')
                   )
                 ),
