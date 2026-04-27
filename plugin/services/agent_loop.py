@@ -306,6 +306,18 @@ async def run_turn(
                         # Real text response — stream tokens to client now.
                         for piece in _rechunk(buffered_content):
                             await emit(Token(content=piece))
+                        try:
+                            ctx.cancel_token.check()
+                        except asyncio.CancelledError:
+                            await emit(
+                                TurnEnd(
+                                    turn_id=turn_id,
+                                    total_tokens=total_tokens,
+                                    iterations=iterations,
+                                    stop_reason="cancelled",
+                                )
+                            )
+                            return
             except OllamaUnreachable as exc:
                 history[:] = history_snapshot
                 await emit(Error(code="ollama_unreachable", message=str(exc)))

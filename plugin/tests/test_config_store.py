@@ -21,4 +21,4 @@ def test_save_then_load_round_trips(tmp_path):
 def test_save_writes_valid_json(tmp_path):
     save_plugin_config(BaluCodePluginConfig(), tmp_path)
     data = json.loads((tmp_path / "plugin_config.json").read_text())
-    assert data["chat_model"] == "qwen2.5-coder:14b-instruct-q4_K_M"
+    assert data["chat_model"] == "qwen2.5-coder:14b"

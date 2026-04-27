@@ -41,6 +41,6 @@ def test_get_ui_manifest_returns_manifest_with_nav_item():
     p = BaluCodePlugin()
     manifest = p.get_ui_manifest()
     assert isinstance(manifest, PluginUIManifest)
-    assert manifest.bundle_path == "ui/bundle.js"
+    assert manifest.bundle_path == "bundle.js"
     assert len(manifest.nav_items) >= 1
     assert manifest.nav_items[0].label == "Balu Code"

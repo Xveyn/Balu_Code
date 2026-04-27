@@ -87,6 +87,7 @@ def test_find_balucode_yaml_returns_none_when_not_found(tmp_path):
     assert find_balucode_yaml(tmp_path) is None
 
 
-def test_load_balucode_yaml_raises_when_not_found(tmp_path):
+def test_load_balucode_yaml_raises_when_not_found(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(FileNotFoundError, match="balu-code init"):
-        load_balucode_yaml()  # no file in cwd during tests (tmp_path not used here)
+        load_balucode_yaml()

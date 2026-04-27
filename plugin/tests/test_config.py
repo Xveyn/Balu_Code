@@ -12,7 +12,7 @@ from plugin.schemas import ConfigUpdateRequest
 def test_defaults_are_populated():
     c = BaluCodePluginConfig()
     assert c.ollama_base_url == "http://127.0.0.1:11434"
-    assert c.chat_model == "qwen2.5-coder:14b-instruct-q4_K_M"
+    assert c.chat_model == "qwen2.5-coder:14b"
     assert c.embed_model == "nomic-embed-text"
 
 

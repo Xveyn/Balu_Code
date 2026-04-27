@@ -86,7 +86,7 @@ def test_index_shows_error_on_failure(tmp_path, monkeypatch):
             json={
                 "job_id": "j2",
                 "project_id": 3,
-                "status": "failed",
+                "status": "error",
                 "files_total": 0,
                 "files_processed": 0,
                 "chunks_total": 0,

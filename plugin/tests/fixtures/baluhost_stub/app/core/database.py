@@ -5,7 +5,8 @@ from typing import Generator
 
 
 class _NoopDB:
-    pass
+    def close(self) -> None:
+        pass
 
 
 def get_db() -> Generator[_NoopDB, None, None]:

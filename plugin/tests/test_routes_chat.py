@@ -31,6 +31,9 @@ class _NoopAuditLogger:
     async def record_tool_call(self, **kwargs) -> None:
         return None
 
+    async def record_turn_end(self, **kwargs) -> None:
+        return None
+
 
 class _FakeOllama:
     def __init__(self, scripted: list[list[dict]]) -> None:
@@ -104,6 +107,9 @@ class _TrackingAuditLogger:
 
         await _asyncio.sleep(0)  # yield to event loop so cancel frames can be processed
 
+    async def record_turn_end(self, **kwargs) -> None:
+        return None
+
 
 def _client(store, ollama, rag_registry, tool_registry, config, audit_log=None) -> TestClient:
     if audit_log is None:
@@ -118,7 +124,7 @@ def _client(store, ollama, rag_registry, tool_registry, config, audit_log=None) 
     app.dependency_overrides[get_tool_registry] = lambda: tool_registry
     app.dependency_overrides[get_plugin_config] = lambda: config
     app.dependency_overrides[get_audit_log] = lambda: audit_log
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-token"})
 
 
 def test_chat_happy_path(tmp_path, store):
