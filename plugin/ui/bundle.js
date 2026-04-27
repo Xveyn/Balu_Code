@@ -489,6 +489,28 @@ function TurnBanner() {
   );
 }
 
+const _thCls = 'text-left text-slate-500 text-xs font-medium py-2 pr-4';
+const _tdCls = 'py-2 pr-4 text-sm';
+
+function StatsTable({ headers, rows }) {
+  return ce('div', { className: 'overflow-x-auto' },
+    ce('table', { className: 'w-full' },
+      ce('thead', null,
+        ce('tr', { className: 'border-b border-slate-800' },
+          headers.map(h => ce('th', { key: h, className: _thCls }, h))
+        )
+      ),
+      ce('tbody', null,
+        rows.map((row, i) =>
+          ce('tr', { key: i, className: 'border-b border-slate-800/50' },
+            row.map((cell, j) => ce('td', { key: j, className: `${_tdCls} text-slate-300` }, cell))
+          )
+        )
+      )
+    )
+  );
+}
+
 function StatsTab() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
@@ -503,28 +525,6 @@ function StatsTab() {
   useEffect(() => { load(); }, [load]);
 
   if (error && !stats) return ce(ErrorBox, { msg: error });
-
-  const thCls = 'text-left text-slate-500 text-xs font-medium py-2 pr-4';
-  const tdCls = 'py-2 pr-4 text-sm';
-
-  function Table({ headers, rows }) {
-    return ce('div', { className: 'overflow-x-auto' },
-      ce('table', { className: 'w-full' },
-        ce('thead', null,
-          ce('tr', { className: 'border-b border-slate-800' },
-            headers.map(h => ce('th', { key: h, className: thCls }, h))
-          )
-        ),
-        ce('tbody', null,
-          rows.map((row, i) =>
-            ce('tr', { key: i, className: 'border-b border-slate-800/50' },
-              row.map((cell, j) => ce('td', { key: j, className: `${tdCls} text-slate-300` }, cell))
-            )
-          )
-        )
-      )
-    );
-  }
 
   return ce('div', { className: 'space-y-6' },
     ce(ErrorBox, { msg: error }),
@@ -549,7 +549,7 @@ function StatsTab() {
 
       ce(Card, null,
         ce('h3', { className: 'text-white font-medium mb-3' }, `Last ${days} days`),
-        ce(Table, {
+        ce(StatsTable, {
           headers: ['Date', 'Requests', 'Tokens In', 'Tokens Out'],
           rows: stats.last_n_days.map(d => [
             d.date,
@@ -562,7 +562,7 @@ function StatsTab() {
 
       stats.by_model.length > 0 && ce(Card, null,
         ce('h3', { className: 'text-white font-medium mb-3' }, 'By Model'),
-        ce(Table, {
+        ce(StatsTable, {
           headers: ['Model', 'Requests', 'Avg Tokens/s'],
           rows: stats.by_model.map(m => [m.model, m.requests, m.avg_tokens_per_s]),
         })
@@ -570,7 +570,7 @@ function StatsTab() {
 
       stats.top_tools.length > 0 && ce(Card, null,
         ce('h3', { className: 'text-white font-medium mb-3' }, 'Top Tools'),
-        ce(Table, {
+        ce(StatsTable, {
           headers: ['Tool', 'Calls', 'Success Rate'],
           rows: stats.top_tools.map(t => [
             t.tool,
