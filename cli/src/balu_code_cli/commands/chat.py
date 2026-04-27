@@ -129,6 +129,7 @@ async def _dispatch_turn(
 
         elif event.type == "error":
             from rich.markup import escape
+
             console.print(f"[red]Error [[{event.code}]]: {escape(str(event.message))}[/red]")
 
 
