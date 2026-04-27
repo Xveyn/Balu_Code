@@ -457,6 +457,141 @@ function SystemTab() {
   );
 }
 
+// ── Stats tab ─────────────────────────────────────────────────────────────────
+
+function TurnBanner() {
+  const [turn, setTurn] = useState(null);
+
+  const load = useCallback(() => {
+    api('/turns/current').then(setTurn).catch(() => {});
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 5_000);
+
+  if (!turn) return null;
+  if (!turn.active) {
+    return ce('div', { className: 'text-xs text-slate-500 italic' }, 'No active turn');
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  const s = turn.elapsed_seconds || 0;
+  const elapsed = `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+
+  return ce('div', {
+    className: 'flex items-center gap-3 px-4 py-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sm',
+  },
+    ce('span', { className: 'w-2 h-2 rounded-full bg-sky-400 animate-pulse' }),
+    ce('span', { className: 'text-sky-300 font-medium' }, turn.model),
+    ce('span', { className: 'text-slate-400' }, `${turn.iterations} iteration${turn.iterations !== 1 ? 's' : ''}`),
+    ce('span', { className: 'text-slate-400' }, elapsed),
+    ce('span', { className: 'text-slate-500' }, turn.username)
+  );
+}
+
+function StatsTab() {
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
+  const [days, setDays] = useState(7);
+
+  const load = useCallback(() => {
+    api(`/stats?days=${days}`)
+      .then(setStats)
+      .catch(e => setError(e.message));
+  }, [days]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (error && !stats) return ce(ErrorBox, { msg: error });
+
+  const thCls = 'text-left text-slate-500 text-xs font-medium py-2 pr-4';
+  const tdCls = 'py-2 pr-4 text-sm';
+
+  function Table({ headers, rows }) {
+    return ce('div', { className: 'overflow-x-auto' },
+      ce('table', { className: 'w-full' },
+        ce('thead', null,
+          ce('tr', { className: 'border-b border-slate-800' },
+            headers.map(h => ce('th', { key: h, className: thCls }, h))
+          )
+        ),
+        ce('tbody', null,
+          rows.map((row, i) =>
+            ce('tr', { key: i, className: 'border-b border-slate-800/50' },
+              row.map((cell, j) => ce('td', { key: j, className: `${tdCls} text-slate-300` }, cell))
+            )
+          )
+        )
+      )
+    );
+  }
+
+  return ce('div', { className: 'space-y-6' },
+    ce(ErrorBox, { msg: error }),
+    ce(TurnBanner),
+
+    ce('div', { className: 'flex items-center justify-between' },
+      ce('h2', { className: 'text-lg font-semibold text-white' }, 'Usage Stats'),
+      ce('div', { className: 'flex items-center gap-2' },
+        ce('label', { className: 'text-sm text-slate-400' }, 'Days'),
+        ce('select', {
+          value: days,
+          onChange: e => setDays(Number(e.target.value)),
+          className: 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-2 py-1',
+        },
+          [7, 14, 30, 90].map(n => ce('option', { key: n, value: n }, n))
+        ),
+        ce(Btn, { onClick: load, variant: 'ghost' }, 'Refresh')
+      )
+    ),
+
+    !stats ? ce(Spinner) : ce('div', { className: 'space-y-6' },
+
+      ce(Card, null,
+        ce('h3', { className: 'text-white font-medium mb-3' }, `Last ${days} days`),
+        ce(Table, {
+          headers: ['Date', 'Requests', 'Tokens In', 'Tokens Out'],
+          rows: stats.last_n_days.map(d => [
+            d.date,
+            d.requests,
+            d.tokens_in.toLocaleString(),
+            d.tokens_out.toLocaleString(),
+          ]),
+        })
+      ),
+
+      stats.by_model.length > 0 && ce(Card, null,
+        ce('h3', { className: 'text-white font-medium mb-3' }, 'By Model'),
+        ce(Table, {
+          headers: ['Model', 'Requests', 'Avg Tokens/s'],
+          rows: stats.by_model.map(m => [m.model, m.requests, m.avg_tokens_per_s]),
+        })
+      ),
+
+      stats.top_tools.length > 0 && ce(Card, null,
+        ce('h3', { className: 'text-white font-medium mb-3' }, 'Top Tools'),
+        ce(Table, {
+          headers: ['Tool', 'Calls', 'Success Rate'],
+          rows: stats.top_tools.map(t => [
+            t.tool,
+            t.calls,
+            `${(t.success_rate * 100).toFixed(0)}%`,
+          ]),
+        })
+      ),
+
+      ce(Card, null,
+        ce('h3', { className: 'text-white font-medium mb-3' }, 'Tool Approvals'),
+        ce('div', { className: 'flex gap-3' },
+          ce(Badge, { text: `auto: ${stats.approval_summary.auto_approved}`, ok: true }),
+          ce(Badge, { text: `user: ${stats.approval_summary.user_approved}`, ok: true }),
+          ce(Badge, { text: `rejected: ${stats.approval_summary.rejected}`, ok: false }),
+        )
+      )
+    )
+  );
+}
+
 // ── Main shell ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -477,7 +612,7 @@ function BaluCode({ user }) {
     config:   ce(ConfigTab),
     logs:     ce(LogsTab),
     system:   ce(SystemTab),
-    stats:    ce('div', { className: 'text-slate-400 text-sm' }, 'Stats tab — coming in next step'),
+    stats:    ce(StatsTab),
   };
 
   return ce('div', { className: 'space-y-6' },

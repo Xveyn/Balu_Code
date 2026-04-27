@@ -1,4 +1,5 @@
 """GPU hardware info via amd-smi / rocm-smi / nvidia-smi."""
+
 from __future__ import annotations
 
 import json
@@ -7,9 +8,7 @@ import subprocess
 
 def _run(cmd: list[str]) -> str | None:
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=2, check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2, check=False)
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout
     except (subprocess.TimeoutExpired, OSError):
@@ -92,11 +91,13 @@ def get_gpu_info() -> dict | None:
         if result:
             return result
 
-    out = _run([
-        "nvidia-smi",
-        "--query-gpu=utilization.gpu,memory.used,memory.total",
-        "--format=csv,noheader,nounits",
-    ])
+    out = _run(
+        [
+            "nvidia-smi",
+            "--query-gpu=utilization.gpu,memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+    )
     if out:
         result = _parse_nvidia_smi(out)
         if result:

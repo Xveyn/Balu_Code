@@ -1,10 +1,11 @@
 """Tests for OllamaClient.ps()."""
+
 from __future__ import annotations
 
 import httpx
 import pytest
 
-from plugin.services.ollama_client import OllamaClient, OllamaUnreachable
+from plugin.services.ollama_client import OllamaClient
 
 
 def _transport(status: int, body: dict | Exception):
@@ -12,6 +13,7 @@ def _transport(status: int, body: dict | Exception):
         if isinstance(body, Exception):
             raise body
         return httpx.Response(status, json=body)
+
     return httpx.MockTransport(handler)
 
 

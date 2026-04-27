@@ -15,9 +15,8 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
-
-_log = logging.getLogger(__name__)
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from balu_code_shared.events import (
@@ -34,6 +33,7 @@ from balu_code_shared.events import (
 from pydantic import ValidationError
 
 from ..config import BaluCodePluginConfig
+from .active_turn import ActiveTurn, clear_active, set_active, update_iterations
 from .audit import AuditLogger
 from .cancel import CancelToken
 from .context_assembler import assemble_context
@@ -49,8 +49,8 @@ from .repo_map import RepoMap
 from .tokenizer import count_messages_tokens, count_tokens
 from .tools import ToolRegistry
 from .tools.base import ToolContext
-from datetime import datetime, timezone
-from .active_turn import ActiveTurn, clear_active, set_active, update_iterations
+
+_log = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system.md"
 _TOOL_USE_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "tool_use.md"
@@ -180,13 +180,15 @@ async def run_turn(
             context_tokens=assembled.context_tokens,
         )
     )
-    set_active(ActiveTurn(
-        turn_id=turn_id,
-        model=deps.config.chat_model,
-        started_at=datetime.now(timezone.utc),
-        iterations=0,
-        username=ctx.username,
-    ))
+    set_active(
+        ActiveTurn(
+            turn_id=turn_id,
+            model=deps.config.chat_model,
+            started_at=datetime.now(UTC),
+            iterations=0,
+            username=ctx.username,
+        )
+    )
     _final_frame: dict = {}
 
     total_tokens = assembled.context_tokens
@@ -227,14 +229,19 @@ async def run_turn(
 
             _log.warning(
                 "[agent_loop] iteration=%d msgs=%d total_tokens=%d",
-                iterations, len(messages), total_tokens,
+                iterations,
+                len(messages),
+                total_tokens,
             )
 
             try:
                 async for frame in deps.ollama.chat_stream(
                     deps.config.chat_model,
                     messages,
-                    options={"temperature": deps.config.temperature, "num_ctx": deps.config.context_window},
+                    options={
+                        "temperature": deps.config.temperature,
+                        "num_ctx": deps.config.context_window,
+                    },
                 ):
                     try:
                         ctx.cancel_token.check()
@@ -252,12 +259,14 @@ async def run_turn(
                         _log.warning("[agent_loop] Ollama error frame: %r", frame["error"])
                         history[:] = history_snapshot
                         await emit(Error(code="ollama_error", message=str(frame["error"])))
-                        await emit(TurnEnd(
-                            turn_id=turn_id,
-                            total_tokens=total_tokens,
-                            iterations=iterations,
-                            stop_reason="error",
-                        ))
+                        await emit(
+                            TurnEnd(
+                                turn_id=turn_id,
+                                total_tokens=total_tokens,
+                                iterations=iterations,
+                                stop_reason="error",
+                            )
+                        )
                         return
                     message = frame.get("message") or {}
                     content_piece = message.get("content") or ""
@@ -276,7 +285,8 @@ async def run_turn(
 
                 _log.warning(
                     "[agent_loop] after stream — buffered=%d chars, native_tool_calls=%s",
-                    len(buffered_content), bool(tool_calls_from_stream),
+                    len(buffered_content),
+                    bool(tool_calls_from_stream),
                 )
 
                 # Detect tool calls from text output (prompt-based tool calling).
@@ -388,7 +398,9 @@ async def run_turn(
                 name = function.get("name") or ""
                 raw_args = function.get("arguments")
                 try:
-                    args_dict = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
+                    args_dict = (
+                        raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
+                    )
                 except (json.JSONDecodeError, ValueError):
                     args_dict = {}
                 tc_id = _new_tool_call_id(iterations, call_index)
@@ -400,7 +412,9 @@ async def run_turn(
                     await emit(
                         ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=True)
                     )
-                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
+                    await emit(
+                        ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg)
+                    )
                     history.append({"role": "tool", "name": name, "content": f"error: {msg}"})
                     messages.append({"role": "tool", "name": name, "content": f"error: {msg}"})
                     await deps.audit_log.record_tool_call(
@@ -419,13 +433,17 @@ async def run_turn(
 
                 auto_approved = tool.risk == "read"
                 await emit(
-                    ToolCall(tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=auto_approved)
+                    ToolCall(
+                        tool_call_id=tc_id, tool=name, args=args_dict, auto_approved=auto_approved
+                    )
                 )
 
                 approved = auto_approved
                 if not auto_approved:
                     await emit(
-                        ApprovalRequest(tool_call_id=tc_id, tool=name, args=args_dict, risk=tool.risk)
+                        ApprovalRequest(
+                            tool_call_id=tc_id, tool=name, args=args_dict, risk=tool.risk
+                        )
                     )
                     loop = asyncio.get_running_loop()
                     future: asyncio.Future[Approval] = loop.create_future()
@@ -474,7 +492,9 @@ async def run_turn(
                     parsed = tool.args_schema.model_validate(args_dict)
                 except ValidationError as exc:
                     msg = f"invalid args: {exc}"
-                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
+                    await emit(
+                        ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg)
+                    )
                     tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                     history.append(tool_msg)
                     messages.append(tool_msg)
@@ -496,7 +516,9 @@ async def run_turn(
                     result = await tool.execute(parsed, tool_ctx)
                 except Exception as exc:
                     msg = f"{type(exc).__name__}: {exc}"
-                    await emit(ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg))
+                    await emit(
+                        ToolResult(tool_call_id=tc_id, status="error", bytes_out=0, error=msg)
+                    )
                     tool_msg = {"role": "tool", "name": name, "content": f"error: {msg}"}
                     history.append(tool_msg)
                     messages.append(tool_msg)
@@ -557,9 +579,7 @@ async def run_turn(
                 prompt_eval_count=_final_frame.get("prompt_eval_count", 0),
                 eval_count=_final_frame.get("eval_count", 0),
                 eval_duration_ns=_final_frame.get("eval_duration", 0),
-                total_duration_ms=(
-                    (_final_frame.get("total_duration") or 0) // 1_000_000
-                ),
+                total_duration_ms=((_final_frame.get("total_duration") or 0) // 1_000_000),
                 iterations=iterations,
             )
 

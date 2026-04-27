@@ -188,6 +188,7 @@ def build_router() -> APIRouter:
         from datetime import datetime
 
         from .services.active_turn import get_active
+
         turn = get_active()
         if turn is None:
             return TurnCurrentResponse(active=False)

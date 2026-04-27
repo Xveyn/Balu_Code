@@ -1,7 +1,8 @@
 """Tests for plugin.services.active_turn singleton."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -26,7 +27,7 @@ def _turn(turn_id: str = "t_abc") -> ActiveTurn:
     return ActiveTurn(
         turn_id=turn_id,
         model="qwen2.5-coder:14b",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         iterations=0,
         username="sven",
     )

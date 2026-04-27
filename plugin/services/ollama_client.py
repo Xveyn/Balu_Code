@@ -144,11 +144,13 @@ class OllamaClient:
             return []
         result = []
         for entry in payload.get("models", []):
-            result.append({
-                "name": entry.get("name", ""),
-                "size_vram": entry.get("size_vram", 0),
-                "context_length": entry.get("context_length"),
-            })
+            result.append(
+                {
+                    "name": entry.get("name", ""),
+                    "size_vram": entry.get("size_vram", 0),
+                    "context_length": entry.get("context_length"),
+                }
+            )
         return result
 
     async def embed(self, model: str, texts: list[str]) -> list[list[float]]:

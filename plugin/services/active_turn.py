@@ -1,4 +1,5 @@
 """In-memory singleton tracking the currently running agent turn."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

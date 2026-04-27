@@ -1,4 +1,5 @@
 """Tests for GET /system, GET /turns/current, and GET /stats routes."""
+
 from __future__ import annotations
 
 from datetime import UTC
@@ -35,12 +36,8 @@ class _FakeAuditLog:
             "last_n_days": [
                 {"date": "2026-04-26", "requests": 5, "tokens_in": 10000, "tokens_out": 2000}
             ],
-            "by_model": [
-                {"model": "qwen2.5-coder:14b", "requests": 5, "avg_tokens_per_s": 18.5}
-            ],
-            "top_tools": [
-                {"tool": "read_file", "calls": 20, "success_rate": 0.95}
-            ],
+            "by_model": [{"model": "qwen2.5-coder:14b", "requests": 5, "avg_tokens_per_s": 18.5}],
+            "top_tools": [{"tool": "read_file", "calls": 20, "success_rate": 0.95}],
             "approval_summary": {"auto_approved": 15, "user_approved": 3, "rejected": 1},
         }
 
@@ -67,6 +64,7 @@ def _make_app(tmp_path):
 
 # ── /system ───────────────────────────────────────────────────────────────────
 
+
 def test_get_system_with_gpu(tmp_path):
     client = TestClient(_make_app(tmp_path))
     with patch("plugin.routes.get_gpu_info", return_value=_GPU_INFO):
@@ -89,8 +87,10 @@ def test_get_system_gpu_unavailable(tmp_path):
 
 # ── /turns/current ────────────────────────────────────────────────────────────
 
+
 def test_turns_current_idle(tmp_path):
     import plugin.services.active_turn as at
+
     at._active = None
     client = TestClient(_make_app(tmp_path))
     r = client.get("/api/plugins/balu_code/turns/current")
@@ -103,14 +103,17 @@ def test_turns_current_active(tmp_path):
 
     import plugin.services.active_turn as at
     from plugin.services.active_turn import ActiveTurn, set_active
+
     at._active = None
-    set_active(ActiveTurn(
-        turn_id="t_test",
-        model="qwen2.5-coder:14b",
-        started_at=datetime.now(UTC),
-        iterations=3,
-        username="sven",
-    ))
+    set_active(
+        ActiveTurn(
+            turn_id="t_test",
+            model="qwen2.5-coder:14b",
+            started_at=datetime.now(UTC),
+            iterations=3,
+            username="sven",
+        )
+    )
     client = TestClient(_make_app(tmp_path))
     r = client.get("/api/plugins/balu_code/turns/current")
     assert r.status_code == 200
@@ -124,6 +127,7 @@ def test_turns_current_active(tmp_path):
 
 
 # ── /stats ────────────────────────────────────────────────────────────────────
+
 
 def test_get_stats_returns_expected_shape(tmp_path):
     client = TestClient(_make_app(tmp_path))

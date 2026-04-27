@@ -86,9 +86,7 @@ class AuditLogger:
         iterations: int,
     ) -> None:
         tokens_per_s = (
-            round(eval_count / (eval_duration_ns / 1e9), 2)
-            if eval_duration_ns > 0
-            else 0.0
+            round(eval_count / (eval_duration_ns / 1e9), 2) if eval_duration_ns > 0 else 0.0
         )
         details = {
             "turn_id": turn_id,
@@ -164,7 +162,8 @@ class AuditLogger:
                 "model": v["model"],
                 "requests": v["requests"],
                 "avg_tokens_per_s": round(v["_tps_sum"] / v["requests"], 2)
-                if v["requests"] > 0 else 0.0,
+                if v["requests"] > 0
+                else 0.0,
             }
             for v in by_model.values()
         ]
@@ -191,8 +190,7 @@ class AuditLogger:
                 {
                     "tool": v["tool"],
                     "calls": v["calls"],
-                    "success_rate": round(v["_ok"] / v["calls"], 2)
-                    if v["calls"] > 0 else 0.0,
+                    "success_rate": round(v["_ok"] / v["calls"], 2) if v["calls"] > 0 else 0.0,
                 }
                 for v in tool_counts.values()
             ],

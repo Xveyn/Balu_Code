@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from plugin.services.system import get_gpu_info
 
@@ -18,13 +15,15 @@ def _mock_run(stdout: str, returncode: int = 0):
 
 # ── amd-smi ──────────────────────────────────────────────────────────────────
 
-AMD_SMI_JSON = json.dumps([
-    {
-        "gpu": 0,
-        "gfx": {"activity": 42},
-        "mem": {"vram_used": 10_500_000_000, "vram_total": 21_474_836_480},
-    }
-])
+AMD_SMI_JSON = json.dumps(
+    [
+        {
+            "gpu": 0,
+            "gfx": {"activity": 42},
+            "mem": {"vram_used": 10_500_000_000, "vram_total": 21_474_836_480},
+        }
+    ]
+)
 
 
 def test_get_gpu_info_amd_smi():
@@ -40,12 +39,14 @@ def test_get_gpu_info_amd_smi():
 
 # ── rocm-smi fallback ─────────────────────────────────────────────────────────
 
-ROCM_SMI_JSON = json.dumps({
-    "card0": {
-        "gpu_busy_percent": "37",
-        "vram": {"mem_used": 9_000_000_000, "mem_total": 21_474_836_480},
+ROCM_SMI_JSON = json.dumps(
+    {
+        "card0": {
+            "gpu_busy_percent": "37",
+            "vram": {"mem_used": 9_000_000_000, "mem_total": 21_474_836_480},
+        }
     }
-})
+)
 
 
 def test_get_gpu_info_rocm_smi_fallback():
@@ -62,6 +63,7 @@ def test_get_gpu_info_rocm_smi_fallback():
 
 
 # ── nvidia-smi fallback ───────────────────────────────────────────────────────
+
 
 def test_get_gpu_info_nvidia_fallback():
     def _side_effect(cmd, **kwargs):
