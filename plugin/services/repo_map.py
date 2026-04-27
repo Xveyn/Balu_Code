@@ -19,8 +19,9 @@ import json
 import os
 from pathlib import Path
 
-from .project_store import ProjectStore
+from .parsers.js_ts import parse_js_ts_file
 from .parsers.python import parse_python_file
+from .project_store import ProjectStore
 from .repo_map_types import (
     ClassSymbol,
     FileSymbols,
@@ -50,6 +51,8 @@ IGNORE_DIRS = frozenset(
         ".tox",
     }
 )
+
+_SOURCE_EXTENSIONS = frozenset({".py", ".js", ".ts", ".jsx", ".tsx"})
 
 
 def _is_ignored(rel_parts: tuple[str, ...]) -> bool:
@@ -129,7 +132,8 @@ class RepoMap:
             dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
             dirpath = Path(dirpath_str)
             for fname in filenames:
-                if not fname.endswith(".py"):
+                ext = Path(fname).suffix
+                if ext not in _SOURCE_EXTENSIONS:
                     continue
                 fs_path = dirpath / fname
                 if not fs_path.is_file():
@@ -163,7 +167,10 @@ class RepoMap:
                         )
                 else:
                     # Content changed or not cached — parse.
-                    imports, classes, functions = parse_python_file(content_bytes)
+                    if ext == ".py":
+                        imports, classes, functions = parse_python_file(content_bytes)
+                    else:
+                        imports, classes, functions = parse_js_ts_file(content_bytes, ext)
                     self._store.upsert_repo_map_entry(
                         project_id=self._project_id,
                         file_path=rel_posix,

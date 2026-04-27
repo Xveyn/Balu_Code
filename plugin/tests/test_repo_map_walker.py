@@ -186,3 +186,32 @@ def test_walking_empty_project_clears_cache(tmp_path, store, project_id):
     p.unlink()
     rm.walk_and_cache()
     assert store.list_repo_map_entries(project_id) == []
+
+
+def test_walks_js_ts_source_files(tmp_path, store, project_id):
+    _write(tmp_path, "a.py", "def foo(): pass\n")
+    _write(tmp_path, "app.js", "function greet() {}\n")
+    _write(tmp_path, "utils.ts", "export type Id = string;\n")
+    _write(tmp_path, "App.tsx", "export default function App() { return null; }\n")
+    _write(tmp_path, "README.md", "ignored\n")
+    rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
+    paths = {f.path for f in rm.walk_and_cache()}
+    assert paths == {"a.py", "app.js", "utils.ts", "App.tsx"}
+
+
+def test_js_function_symbols_extracted(tmp_path, store, project_id):
+    _write(tmp_path, "app.js", "function greet(name) { return name; }\n")
+    rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
+    files = rm.walk_and_cache()
+    assert len(files) == 1
+    f = files[0]
+    assert f.path == "app.js"
+    assert any(fn.name == "greet" for fn in f.functions)
+
+
+def test_ts_interface_appears_as_class_symbol(tmp_path, store, project_id):
+    _write(tmp_path, "types.ts", "interface User { id: number; name: string; }\n")
+    rm = RepoMap(project_root=tmp_path, store=store, project_id=project_id)
+    files = rm.walk_and_cache()
+    assert len(files) == 1
+    assert any(c.name == "User" for c in files[0].classes)
