@@ -5,16 +5,25 @@ the worker coroutine mutates in place. ``start_job`` spawns the worker
 as an ``asyncio.Task`` wrapped in a shim that catches exceptions and
 finalises the status. One job per project at a time — concurrent starts
 raise ``AlreadyIndexingError``.
+
+When a ``db_path`` is supplied the tracker also persists job state to a
+SQLite file so that other uvicorn workers (separate processes) can answer
+status queries for jobs they did not start.  Progress fields
+(files_processed, chunks_total) are NOT written to the DB; only the
+final status/error/timestamps are.  Tests omit ``db_path`` and stay
+fully in-memory.
 """
 
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 
 
 class JobStatus(StrEnum):
@@ -50,9 +59,72 @@ _MAX_FINISHED_JOBS = 50
 
 
 class IndexJobTracker:
-    def __init__(self) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         self._jobs: dict[str, IndexJob] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        self._db_path = db_path
+        if db_path is not None:
+            self._init_db()
+
+    # ------------------------------------------------------------------
+    # SQLite helpers (only used when db_path is set)
+    # ------------------------------------------------------------------
+
+    def _init_db(self) -> None:
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS indexing_jobs (
+                    id          TEXT PRIMARY KEY,
+                    project_id  INTEGER NOT NULL,
+                    status      TEXT NOT NULL,
+                    error       TEXT,
+                    started_at  TEXT,
+                    finished_at TEXT
+                )
+            """)
+
+    def _db_upsert(self, job: IndexJob) -> None:
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(
+                """
+                INSERT INTO indexing_jobs (id, project_id, status, error, started_at, finished_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status      = excluded.status,
+                    error       = excluded.error,
+                    finished_at = excluded.finished_at
+                """,
+                (job.id, job.project_id, job.status, job.error, job.started_at, job.finished_at),
+            )
+
+    def _db_get(self, job_id: str) -> IndexJob | None:
+        with sqlite3.connect(self._db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("SELECT * FROM indexing_jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            return None
+        return IndexJob(
+            id=row["id"],
+            project_id=row["project_id"],
+            status=JobStatus(row["status"]),
+            error=row["error"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+        )
+
+    def _db_has_live(self, project_id: int) -> bool:
+        with sqlite3.connect(self._db_path) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM indexing_jobs WHERE project_id = ? AND status IN ('queued','running') LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        return row is not None
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def start_job(
         self,
@@ -68,6 +140,8 @@ class IndexJobTracker:
             started_at=_now_iso(),
         )
         self._jobs[job.id] = job
+        if self._db_path is not None:
+            self._db_upsert(job)
         task = asyncio.create_task(self._run(job, worker))
         task.add_done_callback(lambda _: self._tasks.pop(job.id, None))
         self._tasks[job.id] = task
@@ -91,6 +165,8 @@ class IndexJobTracker:
         finally:
             if job.finished_at is None:
                 job.finished_at = _now_iso()
+            if self._db_path is not None:
+                self._db_upsert(job)
             self._purge()
 
     def _purge(self) -> None:
@@ -103,10 +179,19 @@ class IndexJobTracker:
             self._jobs.pop(jid)
 
     def get_job(self, job_id: str) -> IndexJob | None:
-        return self._jobs.get(job_id)
+        job = self._jobs.get(job_id)
+        if job is not None:
+            return job
+        if self._db_path is not None:
+            return self._db_get(job_id)
+        return None
 
     def is_running_for_project(self, project_id: int) -> bool:
-        return any(j.project_id == project_id and j.status in _LIVE for j in self._jobs.values())
+        if any(j.project_id == project_id and j.status in _LIVE for j in self._jobs.values()):
+            return True
+        if self._db_path is not None:
+            return self._db_has_live(project_id)
+        return False
 
 
 __all__ = [

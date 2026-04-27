@@ -92,7 +92,7 @@ class BaluCodePlugin(PluginBase):
             embed_model=self._config.embed_model,
             ollama=ollama,
         )
-        index_job_tracker = IndexJobTracker()
+        index_job_tracker = IndexJobTracker(db_path=data_dir / "jobs.db")
         tool_registry = default_registry()
         audit_log = AuditLogger(get_audit_logger_db())
         self._store = store
