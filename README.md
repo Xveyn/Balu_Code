@@ -14,8 +14,10 @@ Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Runs
 - Audit log written to BaluHost `audit_logs` table
 
 **Plugin (web UI)**
-- Models, Projects, Config, Logs tabs
+- Models, Projects, Config, Logs, System, Stats tabs
 - Live session management via WebSocket
+- System tab: live VRAM bar, loaded models, GPU utilisation (polled every 3–30 s)
+- Stats tab: 7/14/30/90-day usage dashboard (requests, tokens, models, tools, approvals) + live active-turn banner
 
 **CLI**
 - `balu-code auth login/status` — authenticate against BaluHost
