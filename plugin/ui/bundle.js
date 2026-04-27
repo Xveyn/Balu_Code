@@ -204,6 +204,7 @@ const CONFIG_FIELDS = [
   { key: 'max_iterations',            label: 'Max Iterations',              type: 'number' },
   { key: 'max_total_tokens_per_turn', label: 'Max Total Tokens / Turn',     type: 'number' },
   { key: 'temperature',               label: 'Temperature (0–2)',            type: 'number', step: 0.1 },
+  { key: 'poll_interval_seconds', label: 'System poll interval (s, min 3)', type: 'number' },
 ];
 
 function ConfigTab() {
@@ -331,6 +332,131 @@ function LogsTab() {
   );
 }
 
+// ── System tab ────────────────────────────────────────────────────────────────
+
+function useInterval(callback, delayMs) {
+  const savedCallback = React.useRef(callback);
+  React.useEffect(() => { savedCallback.current = callback; }, [callback]);
+  React.useEffect(() => {
+    if (delayMs == null) return;
+    const id = setInterval(() => savedCallback.current(), delayMs);
+    return () => clearInterval(id);
+  }, [delayMs]);
+}
+
+function VramBar({ usedBytes, totalBytes }) {
+  if (!totalBytes) {
+    const gb = usedBytes ? (usedBytes / 1e9).toFixed(1) : '—';
+    return ce('span', { className: 'text-sm text-slate-400' }, `${gb} GB loaded (total unknown)`);
+  }
+  const pct = Math.min(100, Math.round((usedBytes / totalBytes) * 100));
+  const usedGb = (usedBytes / 1e9).toFixed(1);
+  const totalGb = (totalBytes / 1e9).toFixed(1);
+  const color = pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-500' : 'bg-sky-500';
+  return ce('div', { className: 'space-y-1' },
+    ce('div', { className: 'flex justify-between text-xs text-slate-400' },
+      ce('span', null, `${usedGb} GB / ${totalGb} GB`),
+      ce('span', null, `${pct}%`)
+    ),
+    ce('div', { className: 'w-full bg-slate-700 rounded-full h-2' },
+      ce('div', { className: `${color} h-2 rounded-full transition-all`, style: { width: `${pct}%` } })
+    )
+  );
+}
+
+function SystemTab() {
+  const [data, setData] = useState(null);
+  const [config, setConfig] = useState(null);
+  const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [pollMs, setPollMs] = useState(10_000);
+
+  useEffect(() => {
+    api('/config').then(c => {
+      setConfig(c);
+      const interval = Math.max(3, c.poll_interval_seconds || 10) * 1000;
+      setPollMs(interval);
+    }).catch(() => {});
+  }, []);
+
+  const load = useCallback(() => {
+    api('/system')
+      .then(d => { setData(d); setLastUpdated(new Date()); setError(null); })
+      .catch(e => setError(e.message));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, pollMs);
+
+  async function changePollInterval(seconds) {
+    const clamped = Math.max(3, seconds);
+    setPollMs(clamped * 1000);
+    try { await api('/config', { method: 'PUT', body: JSON.stringify({ poll_interval_seconds: clamped }) }); }
+    catch (e) { /* non-critical */ }
+  }
+
+  const secsAgo = lastUpdated ? Math.round((Date.now() - lastUpdated) / 1000) : null;
+
+  if (error && !data) return ce(ErrorBox, { msg: error });
+  if (!data) return ce(Spinner);
+
+  const loaded = data.ollama.loaded_models || [];
+  const gpu = data.gpu;
+
+  return ce('div', { className: 'space-y-4' },
+    ce(ErrorBox, { msg: error }),
+
+    ce(Card, null,
+      ce('div', { className: 'flex items-center justify-between mb-4' },
+        ce('h3', { className: 'text-white font-medium' }, 'VRAM'),
+        gpu.available
+          ? ce(Badge, { text: `GPU ${gpu.utilization_pct}%`, ok: gpu.utilization_pct < 90 })
+          : ce('span', { className: 'text-xs text-slate-500' }, 'no GPU tool')
+      ),
+      ce(VramBar, {
+        usedBytes: loaded.reduce((s, m) => s + (m.size_vram || 0), 0),
+        totalBytes: gpu.available ? gpu.vram_total_bytes : null,
+      })
+    ),
+
+    ce(Card, null,
+      ce('h3', { className: 'text-white font-medium mb-4' }, 'Loaded Models'),
+      loaded.length === 0
+        ? ce('p', { className: 'text-slate-500 text-sm' }, 'No models loaded.')
+        : ce('div', { className: 'space-y-2' },
+            loaded.map(m =>
+              ce('div', { key: m.name, className: 'flex items-center justify-between' },
+                ce('div', null,
+                  ce('div', { className: 'text-white text-sm' }, m.name),
+                  ce('div', { className: 'text-xs text-slate-500' },
+                    `${(m.size_vram / 1e9).toFixed(1)} GB VRAM` +
+                    (m.context_length ? ` · ${m.context_length.toLocaleString()} ctx` : '')
+                  )
+                ),
+                ce('div', { className: 'flex gap-1' },
+                  config?.chat_model === m.name  ? ce(Badge, { text: 'chat',  ok: true }) : null,
+                  config?.embed_model === m.name ? ce(Badge, { text: 'embed', ok: true }) : null
+                )
+              )
+            )
+          )
+    ),
+
+    ce('div', { className: 'flex items-center gap-3 text-xs text-slate-500' },
+      secsAgo !== null ? ce('span', null, `Updated ${secsAgo}s ago`) : null,
+      ce('span', null, '·'),
+      ce('label', null, 'every'),
+      ce('select', {
+        value: pollMs / 1000,
+        onChange: e => changePollInterval(Number(e.target.value)),
+        className: 'bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-1 py-0.5',
+      },
+        [3, 5, 10, 30].map(s => ce('option', { key: s, value: s }, `${s}s`))
+      )
+    )
+  );
+}
+
 // ── Main shell ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -338,6 +464,8 @@ const TABS = [
   { id: 'projects', label: 'Projects' },
   { id: 'config',   label: 'Config' },
   { id: 'logs',     label: 'Logs' },
+  { id: 'system',   label: 'System' },
+  { id: 'stats',    label: 'Stats' },
 ];
 
 function BaluCode({ user }) {
@@ -348,6 +476,8 @@ function BaluCode({ user }) {
     projects: ce(ProjectsTab),
     config:   ce(ConfigTab),
     logs:     ce(LogsTab),
+    system:   ce(SystemTab),
+    stats:    ce('div', { className: 'text-slate-400 text-sm' }, 'Stats tab — coming in next step'),
   };
 
   return ce('div', { className: 'space-y-6' },
