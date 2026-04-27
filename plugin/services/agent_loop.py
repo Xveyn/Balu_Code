@@ -10,6 +10,7 @@ function never raises; all failures become an ``Error`` event plus
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -548,6 +549,19 @@ async def run_turn(
         )
     finally:
         clear_active(turn_id)
+        with contextlib.suppress(Exception):
+            await deps.audit_log.record_turn_end(
+                turn_id=turn_id,
+                model=deps.config.chat_model,
+                username=ctx.username,
+                prompt_eval_count=_final_frame.get("prompt_eval_count", 0),
+                eval_count=_final_frame.get("eval_count", 0),
+                eval_duration_ns=_final_frame.get("eval_duration", 0),
+                total_duration_ms=(
+                    (_final_frame.get("total_duration") or 0) // 1_000_000
+                ),
+                iterations=iterations,
+            )
 
 
 async def _resolve_repo_map(deps: TurnDeps) -> str:
