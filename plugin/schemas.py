@@ -119,19 +119,56 @@ class TurnCurrentResponse(BaseModel):
     username: str | None = None
 
 
+class DayStat(BaseModel):
+    date: str
+    requests: int
+    tokens_in: int
+    tokens_out: int
+
+
+class ModelStat(BaseModel):
+    model: str
+    requests: int
+    avg_tokens_per_s: float
+
+
+class ToolStat(BaseModel):
+    tool: str
+    calls: int
+    success_rate: float
+
+
+class ApprovalSummary(BaseModel):
+    auto_approved: int
+    user_approved: int
+    rejected: int
+
+
+class StatsResponse(BaseModel):
+    last_n_days: list[DayStat]
+    by_model: list[ModelStat]
+    top_tools: list[ToolStat]
+    approval_summary: ApprovalSummary
+
+
 __all__ = [
+    "ApprovalSummary",
     "ConfigUpdateRequest",
+    "DayStat",
     "GpuInfo",
     "IndexJobResponse",
     "IndexStatusResponse",
     "LoadedModel",
     "LogEntry",
     "LogsResponse",
+    "ModelStat",
     "ModelsResponse",
     "OllamaSystemInfo",
     "ProjectCreate",
     "ProjectsResponse",
     "RepoMapResponse",
+    "StatsResponse",
     "SystemResponse",
+    "ToolStat",
     "TurnCurrentResponse",
 ]

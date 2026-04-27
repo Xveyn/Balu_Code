@@ -120,3 +120,29 @@ def test_turns_current_active(tmp_path):
     assert body["model"] == "qwen2.5-coder:14b"
     assert body["elapsed_seconds"] is not None
     at._active = None
+
+
+# ── /stats ────────────────────────────────────────────────────────────────────
+
+def test_get_stats_returns_expected_shape(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert "last_n_days" in body
+    assert "by_model" in body
+    assert "top_tools" in body
+    assert "approval_summary" in body
+    assert body["approval_summary"]["auto_approved"] == 15
+
+
+def test_get_stats_custom_days(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/stats?days=14")
+    assert r.status_code == 200
+
+
+def test_get_stats_rejects_excessive_days(tmp_path):
+    client = TestClient(_make_app(tmp_path))
+    r = client.get("/api/plugins/balu_code/stats?days=91")
+    assert r.status_code == 422

@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import UTC
 from pathlib import Path
 
 from app.api.deps import get_current_user
@@ -36,7 +37,9 @@ from .deps import (
     update_plugin_config,
 )
 from .schemas import (
+    ApprovalSummary,
     ConfigUpdateRequest,
+    DayStat,
     GpuInfo,
     IndexJobResponse,
     IndexStatusResponse,
@@ -44,11 +47,14 @@ from .schemas import (
     LogEntry,
     LogsResponse,
     ModelsResponse,
+    ModelStat,
     OllamaSystemInfo,
     ProjectCreate,
     ProjectsResponse,
     RepoMapResponse,
+    StatsResponse,
     SystemResponse,
+    ToolStat,
     TurnCurrentResponse,
 )
 from .services.agent_loop import TurnContext, TurnDeps, run_turn
@@ -179,12 +185,13 @@ def build_router() -> APIRouter:
     async def get_turns_current(
         _user: UserPublic = Depends(get_current_user),
     ) -> TurnCurrentResponse:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from .services.active_turn import get_active
         turn = get_active()
         if turn is None:
             return TurnCurrentResponse(active=False)
-        elapsed = int((datetime.now(timezone.utc) - turn.started_at).total_seconds())
+        elapsed = int((datetime.now(UTC) - turn.started_at).total_seconds())
         return TurnCurrentResponse(
             active=True,
             turn_id=turn.turn_id,
@@ -193,6 +200,20 @@ def build_router() -> APIRouter:
             elapsed_seconds=elapsed,
             iterations=turn.iterations,
             username=turn.username,
+        )
+
+    @router.get("/stats", response_model=StatsResponse, tags=["balu_code"])
+    async def get_stats_route(
+        days: int = Query(default=7, ge=1, le=90),
+        _user: UserPublic = Depends(get_current_user),
+        audit_log=Depends(get_audit_log),
+    ) -> StatsResponse:
+        raw = await audit_log.query_stats(days=days)
+        return StatsResponse(
+            last_n_days=[DayStat(**d) for d in raw["last_n_days"]],
+            by_model=[ModelStat(**m) for m in raw["by_model"]],
+            top_tools=[ToolStat(**t) for t in raw["top_tools"]],
+            approval_summary=ApprovalSummary(**raw["approval_summary"]),
         )
 
     @router.post(
