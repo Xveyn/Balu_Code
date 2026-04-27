@@ -8,10 +8,9 @@ raise ``AlreadyIndexingError``.
 
 When a ``db_path`` is supplied the tracker also persists job state to a
 SQLite file so that other uvicorn workers (separate processes) can answer
-status queries for jobs they did not start.  Progress fields
-(files_processed, chunks_total) are NOT written to the DB; only the
-final status/error/timestamps are.  Tests omit ``db_path`` and stay
-fully in-memory.
+status queries for jobs they did not start.  All fields including progress
+counts are written on job finish.  Tests omit ``db_path`` and stay fully
+in-memory.
 """
 
 from __future__ import annotations
@@ -75,28 +74,55 @@ class IndexJobTracker:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS indexing_jobs (
-                    id          TEXT PRIMARY KEY,
-                    project_id  INTEGER NOT NULL,
-                    status      TEXT NOT NULL,
-                    error       TEXT,
-                    started_at  TEXT,
-                    finished_at TEXT
+                    id               TEXT PRIMARY KEY,
+                    project_id       INTEGER NOT NULL,
+                    status           TEXT NOT NULL,
+                    files_total      INTEGER DEFAULT 0,
+                    files_processed  INTEGER DEFAULT 0,
+                    chunks_total     INTEGER DEFAULT 0,
+                    error            TEXT,
+                    started_at       TEXT,
+                    finished_at      TEXT
                 )
             """)
+            # Migrate existing DBs that predate the progress columns.
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(indexing_jobs)")}
+            for col, defn in (
+                ("files_total", "INTEGER DEFAULT 0"),
+                ("files_processed", "INTEGER DEFAULT 0"),
+                ("chunks_total", "INTEGER DEFAULT 0"),
+            ):
+                if col not in existing:
+                    conn.execute(f"ALTER TABLE indexing_jobs ADD COLUMN {col} {defn}")
 
     def _db_upsert(self, job: IndexJob) -> None:
         with sqlite3.connect(self._db_path) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(
                 """
-                INSERT INTO indexing_jobs (id, project_id, status, error, started_at, finished_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO indexing_jobs
+                    (id, project_id, status, files_total, files_processed, chunks_total,
+                     error, started_at, finished_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    status      = excluded.status,
-                    error       = excluded.error,
-                    finished_at = excluded.finished_at
+                    status          = excluded.status,
+                    files_total     = excluded.files_total,
+                    files_processed = excluded.files_processed,
+                    chunks_total    = excluded.chunks_total,
+                    error           = excluded.error,
+                    finished_at     = excluded.finished_at
                 """,
-                (job.id, job.project_id, job.status, job.error, job.started_at, job.finished_at),
+                (
+                    job.id,
+                    job.project_id,
+                    job.status,
+                    job.files_total,
+                    job.files_processed,
+                    job.chunks_total,
+                    job.error,
+                    job.started_at,
+                    job.finished_at,
+                ),
             )
 
     def _db_get(self, job_id: str) -> IndexJob | None:
@@ -109,6 +135,9 @@ class IndexJobTracker:
             id=row["id"],
             project_id=row["project_id"],
             status=JobStatus(row["status"]),
+            files_total=row["files_total"],
+            files_processed=row["files_processed"],
+            chunks_total=row["chunks_total"],
             error=row["error"],
             started_at=row["started_at"],
             finished_at=row["finished_at"],
