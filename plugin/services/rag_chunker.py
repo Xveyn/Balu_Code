@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from .parsers.js_ts import extract_top_level_ranges_js_ts
 from .parsers.python import get_parser
 
 
@@ -60,6 +61,57 @@ def chunk_python_file(
         return []
 
     ranges = _extract_top_level_ranges(source)
+
+    if not ranges:
+        return list(_sliding_windows(file_path, lines, 1, n_lines, window_lines, overlap_lines))
+
+    chunks: list[Chunk] = []
+    cursor = 1
+
+    for start, end in ranges:
+        if cursor <= start - 1:
+            chunks.append(_build_chunk(file_path, lines, cursor, start - 1))
+
+        span = end - start + 1
+        if span <= symbol_max_lines:
+            chunks.append(_build_chunk(file_path, lines, start, end))
+        else:
+            chunks.extend(
+                _sliding_windows(file_path, lines, start, end, window_lines, overlap_lines)
+            )
+
+        cursor = end + 1
+
+    if cursor <= n_lines:
+        chunks.append(_build_chunk(file_path, lines, cursor, n_lines))
+
+    return chunks
+
+
+def chunk_js_ts_file(
+    file_path: str,
+    source: bytes,
+    extension: str,
+    *,
+    window_lines: int = 40,
+    overlap_lines: int = 10,
+    symbol_max_lines: int = 80,
+) -> list[Chunk]:
+    """Split a JS/TS/JSX/TSX file into chunks for embedding.
+
+    Same algorithm as chunk_python_file — symbol boundaries first, sliding
+    windows for long symbols and files with no recognisable symbols.
+    """
+    if not source:
+        return []
+
+    text = source.decode("utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    n_lines = len(lines)
+    if n_lines == 0:
+        return []
+
+    ranges = extract_top_level_ranges_js_ts(source, extension)
 
     if not ranges:
         return list(_sliding_windows(file_path, lines, 1, n_lines, window_lines, overlap_lines))
@@ -140,4 +192,4 @@ def _sliding_windows(
         pos += stride
 
 
-__all__ = ["Chunk", "chunk_python_file"]
+__all__ = ["Chunk", "chunk_python_file", "chunk_js_ts_file"]
