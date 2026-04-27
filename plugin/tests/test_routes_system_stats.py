@@ -1,9 +1,9 @@
 """Tests for GET /system, GET /turns/current, and GET /stats routes."""
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import patch
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -99,14 +99,15 @@ def test_turns_current_idle(tmp_path):
 
 
 def test_turns_current_active(tmp_path):
-    from datetime import datetime, timezone
-    from plugin.services.active_turn import ActiveTurn, set_active
+    from datetime import datetime
+
     import plugin.services.active_turn as at
+    from plugin.services.active_turn import ActiveTurn, set_active
     at._active = None
     set_active(ActiveTurn(
         turn_id="t_test",
         model="qwen2.5-coder:14b",
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         iterations=3,
         username="sven",
     ))
