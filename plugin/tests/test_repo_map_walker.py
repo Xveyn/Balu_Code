@@ -74,7 +74,7 @@ def test_second_walk_is_a_cache_hit_for_unchanged_files(tmp_path, store, project
 
     def counting_parse(source: bytes):
         parse_calls.append(source)
-        from plugin.services.repo_map_python import parse_python_file as real
+        from plugin.services.parsers.python import parse_python_file as real
 
         return real(source)
 
@@ -102,7 +102,7 @@ def test_mtime_change_without_content_change_skips_reparse(
 
     def counting_parse(source: bytes):
         parse_calls.append(source)
-        from plugin.services.repo_map_python import parse_python_file as real
+        from plugin.services.parsers.python import parse_python_file as real
 
         return real(source)
 
@@ -124,7 +124,7 @@ def test_content_change_triggers_reparse(tmp_path, store, project_id, monkeypatc
 
     def counting_parse(source: bytes):
         parse_calls.append(source)
-        from plugin.services.repo_map_python import parse_python_file as real
+        from plugin.services.parsers.python import parse_python_file as real
 
         return real(source)
 

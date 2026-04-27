@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from plugin.services.repo_map_python import parse_python_file
+from plugin.services.parsers.python import parse_python_file
 from plugin.services.repo_map_types import ClassSymbol, FunctionSymbol
 
 

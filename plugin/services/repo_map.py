@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 from .project_store import ProjectStore
-from .repo_map_python import parse_python_file
+from .parsers.python import parse_python_file
 from .repo_map_types import (
     ClassSymbol,
     FileSymbols,

@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from .repo_map_python import get_parser
+from .parsers.python import get_parser
 
 
 @dataclass(frozen=True)
