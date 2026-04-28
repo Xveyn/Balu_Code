@@ -26,6 +26,10 @@ from .rag_chunker import Chunk
 
 _TOKEN_RE = re.compile(r"[^\W_]+", flags=re.UNICODE)
 
+# nomic-embed-text has an 8 192-token context window. At ~4 chars/token that's
+# ~32 K chars. 30 K gives a comfortable margin and also fits smaller models.
+_MAX_EMBED_CHARS = 30_000
+
 
 def _keyword_tokens(query: str) -> set[str]:
     """Lowercased tokens of length >=3 extracted from ``query``."""
@@ -134,7 +138,11 @@ class RagIndex:
         if not chunks:
             await self.delete_file_chunks(file_path)
             return
-        embeddings = await self._ollama.embed(self._embed_model, [c.text for c in chunks])
+        # Cap each chunk to _MAX_EMBED_CHARS before embedding to avoid context-length
+        # errors. nomic-embed-text has an 8192-token context; at ~4 chars/token that's
+        # ~32 K chars. We use 30 K to leave headroom for models with smaller contexts.
+        texts = [c.text[:_MAX_EMBED_CHARS] for c in chunks]
+        embeddings = await self._ollama.embed(self._embed_model, texts)
         async with self._lock:
             await asyncio.to_thread(self._upsert_sync, file_path, file_sha1, chunks, embeddings)
 

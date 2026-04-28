@@ -157,14 +157,29 @@ class OllamaClient:
         """Embed one or more texts via Ollama /api/embeddings.
 
         Empty input returns ``[]`` without touching the network.
+        If a text exceeds the model's context length, it is truncated
+        (halved up to 3 times) before the error is propagated.
         """
         if not texts:
             return []
-        vectors: list[list[float]] = []
-        for text in texts:
-            response = await self._request_with_retry(
-                "POST", "/api/embeddings", json_body={"model": model, "prompt": text}
-            )
+        return [await self._embed_one(model, text) for text in texts]
+
+    async def _embed_one(self, model: str, text: str) -> list[float]:
+        current = text
+        for attempt in range(11):  # original + up to 10 halvings
+            try:
+                response = await self._request_with_retry(
+                    "POST", "/api/embeddings", json_body={"model": model, "prompt": current}
+                )
+            except OllamaUnreachable as exc:
+                if "context length" in str(exc):
+                    if attempt < 10:
+                        current = current[: len(current) // 2]
+                        continue
+                    raise OllamaUnreachable(
+                        f"text still too long for model {model!r} after 10 truncations"
+                    ) from exc
+                raise
             try:
                 payload = response.json()
             except (json.JSONDecodeError, ValueError) as exc:
@@ -172,13 +187,12 @@ class OllamaClient:
             if payload.get("error"):
                 raise OllamaUnreachable(f"/api/embeddings error: {payload['error']}")
             try:
-                embedding = payload["embedding"]
+                return list(payload["embedding"])
             except (KeyError, TypeError) as exc:
                 raise OllamaUnreachable(
                     f"missing 'embedding' field in /api/embeddings response: {exc}"
                 ) from exc
-            vectors.append(list(embedding))
-        return vectors
+        raise OllamaUnreachable(f"embed loop exhausted for model {model!r}")
 
     async def chat_stream(
         self,
