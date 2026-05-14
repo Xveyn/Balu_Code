@@ -20,7 +20,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["shared/tests", "plugin/tests", "cli/tests", "scripts/tests"]
+testpaths = ["shared/tests", "plugin/tests", "scripts/tests"]
 pythonpath = ["."]
 addopts = "-ra -q --strict-markers --import-mode=importlib"
 asyncio_mode = "auto"

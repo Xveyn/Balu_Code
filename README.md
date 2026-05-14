@@ -1,6 +1,6 @@
 # Balu Code
 
-Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Powered by [opencode](https://github.com/sst/opencode), controlled via a terminal CLI or the BaluHost web UI.
+Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Powered by [opencode](https://github.com/sst/opencode), controlled via the BaluHost web UI or the embedded opencode CLI.
 
 **Current version:** 0.2.0
 
@@ -23,14 +23,11 @@ Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as
 - System tab: live VRAM bar, loaded models, GPU utilisation (polled every 3–30 s)
 - Stats tab: 7/14/30/90-day usage dashboard (requests, tokens, models, tools, approvals) + live active-turn banner
 
-**CLI**
-- `balu-code auth login/status` — authenticate against BaluHost
-- `balu-code init` — register a project
-- `balu-code models` — list available Ollama models
-- `balu-code index` — trigger and stream an index job
-- `balu-code chat [--yolo] [--model]` — interactive streaming chat REPL
-- `balu-code session list/resume/delete` — manage saved sessions
-- `balu-code config get/set` — manage CLI configuration
+**CLI** (via embedded opencode)
+- Interactive chat REPL with agentic approval flow
+- One-shot prompts with `opencode-linux-x86_64 run "..."`
+- Full opencode command suite (models, config, etc.)
+- See [`docs/cli.md`](docs/cli.md) for usage
 
 ## Requirements
 
@@ -52,14 +49,10 @@ Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as
 # Download balu_code-0.2.0.bhplugin from GitHub Releases,
 # then upload via BaluHost → Plugins → Install plugin.
 
-# 2. Install the CLI and authenticate
-pip install balu-code-cli
-balu-code auth login --server https://<host> --key <key>
+# 2. Use the web UI to configure models and create projects.
 
-# 3. Register a project and start chatting
-cd ~/my-project
-balu-code init
-balu-code chat
+# 3. Start chatting via the web UI, or use the embedded opencode binary:
+~/.local/share/balu-code/runtime/opencode-linux-x86_64
 ```
 
 See [`docs/install.md`](docs/install.md) for the full installation guide including ROCm setup.
@@ -69,8 +62,7 @@ See [`docs/install.md`](docs/install.md) for the full installation guide includi
 | Dir | Purpose | Distribution |
 |-----|---------|--------------|
 | `plugin/` | BaluHost server plugin (`balu_code`) | `.bhplugin` ZIP → BaluHost Plugin Marketplace |
-| `cli/` | Terminal client (`balu-code`) | `balu-code-cli` wheel → PyPI |
-| `shared/` | Pydantic event schemas shared by both | path-dep in dev, vendored on build |
+| `shared/` | Pydantic event schemas, common types | path-dep in dev, vendored on build |
 | `scripts/` | Build and release tooling | — |
 | `docs/` | Install guide, CLI reference, config reference | — |
 
