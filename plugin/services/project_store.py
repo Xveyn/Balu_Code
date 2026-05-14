@@ -38,6 +38,7 @@ class Project(BaseModel):
     config_yaml: str | None
     created_at: str
     updated_at: str
+    opencode_session_id: str | None = None
 
 
 class RepoMapCacheRow(BaseModel):
@@ -68,6 +69,21 @@ CREATE TABLE IF NOT EXISTS repo_map_cache (
 );
 """
 
+_MIGRATIONS = [
+    "ALTER TABLE projects ADD COLUMN opencode_session_id TEXT",
+]
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    """Idempotent column adds. sqlite has no IF NOT EXISTS for columns."""
+    for stmt in _MIGRATIONS:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
+    conn.commit()
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -86,6 +102,7 @@ class ProjectStore:
             self._conn.execute("PRAGMA foreign_keys = ON")
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
+            _apply_migrations(self._conn)
 
     def create_project(self, name: str, root_path: str, config_yaml: str | None) -> Project:
         now = _now_iso()
@@ -109,12 +126,13 @@ class ProjectStore:
             config_yaml=config_yaml,
             created_at=now,
             updated_at=now,
+            opencode_session_id=None,
         )
 
     def list_projects(self) -> list[Project]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, name, root_path, config_yaml, created_at, updated_at "
+                "SELECT id, name, root_path, config_yaml, created_at, updated_at, opencode_session_id "
                 "FROM projects ORDER BY id ASC"
             ).fetchall()
         return [Project(**dict(r)) for r in rows]
@@ -122,7 +140,7 @@ class ProjectStore:
     def get_project(self, project_id: int) -> Project:
         with self._lock:
             row = self._conn.execute(
-                "SELECT id, name, root_path, config_yaml, created_at, updated_at "
+                "SELECT id, name, root_path, config_yaml, created_at, updated_at, opencode_session_id "
                 "FROM projects WHERE id = ?",
                 (project_id,),
             ).fetchone()
@@ -185,6 +203,14 @@ class ProjectStore:
                     f"AND file_path NOT IN ({placeholders})",
                     params,
                 )
+            self._conn.commit()
+
+    def set_opencode_session_id(self, project_id: int, session_id: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE projects SET opencode_session_id = ?, updated_at = ? WHERE id = ?",
+                (session_id, _now_iso(), project_id),
+            )
             self._conn.commit()
 
     def close(self) -> None:
