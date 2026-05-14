@@ -164,6 +164,32 @@ git branch -d feat/opencode-runtime
   systemd `WorkingDirectory` for the lifetime of the subprocess).
 - SSE token streaming.
 - A browser-side chat UI in `plugin/ui/bundle.js`.
-- `OPENCODE_SERVER_PASSWORD` hardening.
 
-All four are tracked as v0.3.0 candidates.
+All three are tracked as v0.3.0 candidates.
+
+## TODO: opencode server password
+
+opencode logs `Warning: OPENCODE_SERVER_PASSWORD is not set; server is
+unsecured.` on every start. While the server only binds to `127.0.0.1`
+in our setup, two situations escalate this from cosmetic to a real
+security issue:
+
+1. **Web UI exposure**: opencode's HTTP server already ships a full
+   browser UI at `GET http://127.0.0.1:4096/`. Anyone with shell access
+   to the host (any local user, any process) can drive the agent —
+   read files, run shell commands under the plugin's uid — without auth.
+2. **LAN exposure**: the moment the server binds to `0.0.0.0` (via
+   `--hostname 0.0.0.0` or `--mdns`), every device on the LAN can
+   reach the unauthenticated agent.
+
+Fix (v0.3.0 candidate):
+- Generate a random password at first plugin start, store it under
+  `~/.local/share/balu-code/runtime.password` (mode 0600).
+- Pass it as the `OPENCODE_SERVER_PASSWORD` env var when spawning
+  opencode (see `start_or_attach_server` in `plugin/services/opencode_runtime.py`).
+- Forward the same value in the `Authorization: Bearer <password>`
+  header from `OpencodeClient` (so the existing `/chat/v2` path still
+  works).
+- Optional: surface the password in the BaluHost Runtime tab so admins
+  can copy it for the standalone `opencode` CLI / browser usage
+  (`OPENCODE_SERVER_PASSWORD=... opencode attach http://127.0.0.1:4096`).
