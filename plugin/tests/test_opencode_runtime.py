@@ -84,3 +84,90 @@ async def test_ensure_binary_skips_when_present_and_valid(tmp_path, monkeypatch)
     transport = httpx.MockTransport(fail_handler)
     result = await rt.ensure_binary(tmp_path, transport=transport)
     assert result == bin_path
+
+
+# ---------------------------------------------------------------------------
+# Task 5: server lifecycle
+# ---------------------------------------------------------------------------
+import asyncio
+import os
+
+
+async def _stub_wait_healthy(host, port, timeout):
+    return True
+
+
+@pytest.mark.asyncio
+async def test_start_server_spawns_subprocess(tmp_path, monkeypatch):
+    fake = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+
+    cfg_dir = tmp_path  # directory containing opencode.json
+    log = tmp_path / "opencode.log"
+
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+
+    handle = await rt.start_server(
+        binary=fake, config_dir=cfg_dir, log_path=log, port=4096, ready_timeout=2.0
+    )
+    try:
+        assert handle.pid > 0
+        assert handle.port == 4096
+    finally:
+        await rt.stop_server(handle)
+
+
+@pytest.mark.asyncio
+async def test_stop_server_terminates_process(tmp_path, monkeypatch):
+    fake = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+    cfg_dir = tmp_path
+    log = tmp_path / "opencode.log"
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+
+    handle = await rt.start_server(
+        binary=fake, config_dir=cfg_dir, log_path=log, port=4096, ready_timeout=2.0
+    )
+    await rt.stop_server(handle)
+    with pytest.raises(ProcessLookupError):
+        os.kill(handle.pid, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not os.path.exists("/proc/self/environ"), reason="Linux /proc not available"
+)
+async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
+    """Verify start_server passes OPENCODE_CONFIG_DIR env var to child process."""
+    fake = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+    cfg_dir = tmp_path / "configdir"
+    cfg_dir.mkdir()
+    log = tmp_path / "opencode.log"
+
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+
+    handle = await rt.start_server(
+        binary=fake, config_dir=cfg_dir, log_path=log, port=4096, ready_timeout=2.0
+    )
+    try:
+        await asyncio.sleep(0.1)
+        import pathlib
+        environ_file = pathlib.Path(f"/proc/{handle.pid}/environ")
+        if environ_file.exists():
+            env_data = environ_file.read_bytes().split(b"\x00")
+            env_dict = dict(
+                e.decode().split("=", 1) for e in env_data if b"=" in e
+            )
+            assert env_dict.get("OPENCODE_CONFIG_DIR") == str(cfg_dir)
+    finally:
+        await rt.stop_server(handle)

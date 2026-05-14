@@ -6,13 +6,19 @@ integration smoke test, ship.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
+import os
 import platform
+import signal
 import tarfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+
+_spawn = asyncio.create_subprocess_exec  # safe API — no shell
 
 OPENCODE_VERSION = "1.14.50"  # bump per release; verify checksums when bumping
 
@@ -111,12 +117,127 @@ def _verify_checksum(path: Path, expected: str) -> bool:
     return actual == expected
 
 
+# ---------------------------------------------------------------------------
+# Server lifecycle
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ServerHandle:
+    process: asyncio.subprocess.Process
+    port: int
+    log_fd: int
+
+    @property
+    def pid(self) -> int:
+        return self.process.pid
+
+
+async def start_server(
+    *,
+    binary: Path,
+    config_dir: Path,
+    log_path: Path,
+    port: int = 4096,
+    hostname: str = "127.0.0.1",
+    ready_timeout: float = 15.0,
+) -> ServerHandle:
+    """Spawn `opencode serve --port <port> --hostname <host>` with OPENCODE_CONFIG_DIR
+    pointing at `config_dir`, then poll /global/health until ready.
+
+    opencode v1.14.50 has no --config flag; configuration is loaded from
+    `<OPENCODE_CONFIG_DIR>/opencode.json` (or `.opencode/` subdirectory).
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_file = log_path.open("ab")
+    log_fd = log_file.fileno()
+
+    env = {**os.environ, "OPENCODE_CONFIG_DIR": str(config_dir)}
+    proc = await _spawn(
+        str(binary),
+        "serve",
+        "--port",
+        str(port),
+        "--hostname",
+        hostname,
+        stdout=log_fd,
+        stderr=log_fd,
+        stdin=asyncio.subprocess.DEVNULL,
+        env=env,
+    )
+
+    actual_port = port if port > 0 else _read_port_from_log(log_path, timeout=5.0)
+    healthy = await _wait_for_health(hostname, actual_port, timeout=ready_timeout)
+    if not healthy:
+        proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+        raise RuntimeError(
+            f"opencode server did not become healthy within {ready_timeout}s — "
+            f"check {log_path}"
+        )
+    return ServerHandle(process=proc, port=actual_port, log_fd=log_fd)
+
+
+async def stop_server(handle: ServerHandle, *, grace_seconds: float = 5.0) -> None:
+    """SIGTERM, wait grace, SIGKILL if needed."""
+    if handle.process.returncode is not None:
+        return
+    handle.process.send_signal(signal.SIGTERM)
+    try:
+        await asyncio.wait_for(handle.process.wait(), timeout=grace_seconds)
+    except asyncio.TimeoutError:
+        handle.process.kill()
+        await handle.process.wait()
+
+
+async def _wait_for_health(host: str, port: int, timeout: float) -> bool:
+    """Poll GET /global/health until 200 or timeout."""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        while loop.time() < deadline:
+            try:
+                resp = await client.get(f"http://{host}:{port}/global/health")
+                if resp.status_code == 200:
+                    return True
+            except (httpx.HTTPError, OSError):
+                pass
+            await asyncio.sleep(0.25)
+    return False
+
+
+def _read_port_from_log(log_path: Path, timeout: float) -> int:
+    """When port=0 (OS-allocated), parse opencode stdout for the actual port.
+
+    opencode v1.14.50 prints a line containing 'http://<host>:<port>' on startup.
+    """
+    import re
+    import time
+
+    deadline = time.monotonic() + timeout
+    pattern = re.compile(r"http://[^:/\s]+:(\d+)")
+    while time.monotonic() < deadline:
+        if log_path.exists():
+            for line in log_path.read_text(errors="ignore").splitlines():
+                m = pattern.search(line)
+                if m:
+                    return int(m.group(1))
+        time.sleep(0.1)
+    raise RuntimeError(f"could not detect opencode port from log {log_path}")
+
+
 __all__ = [
     "BINARY_CHECKSUMS",
     "ChecksumMismatchError",
     "OPENCODE_VERSION",
+    "ServerHandle",
     "UnsupportedPlatformError",
     "binary_path",
     "detect_target_triple",
     "ensure_binary",
+    "start_server",
+    "stop_server",
 ]
