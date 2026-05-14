@@ -457,6 +457,74 @@ function SystemTab() {
   );
 }
 
+// ── Runtime tab (opencode subprocess status) ──────────────────────────────────
+
+function RuntimeTab() {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const load = useCallback(() => {
+    api('/runtime/status')
+      .then(d => { setStatus(d); setLastUpdated(new Date()); setError(null); })
+      .catch(e => setError(e.message));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useInterval(load, 5000);
+
+  if (error && !status) return ce(ErrorBox, { msg: error });
+  if (!status) return ce(Spinner);
+
+  const secsAgo = lastUpdated ? Math.round((Date.now() - lastUpdated) / 1000) : null;
+
+  function Row({ label, value, badge }) {
+    return ce('div', { className: 'flex items-center justify-between py-2 border-b border-slate-800 last:border-b-0' },
+      ce('span', { className: 'text-slate-400 text-sm' }, label),
+      ce('div', { className: 'flex items-center gap-2' },
+        ce('span', { className: 'text-white font-mono text-sm' }, value),
+        badge
+      )
+    );
+  }
+
+  return ce('div', { className: 'space-y-4' },
+    ce(ErrorBox, { msg: error }),
+
+    ce(Card, null,
+      ce('div', { className: 'flex items-center justify-between mb-4' },
+        ce('h3', { className: 'text-white font-medium' }, 'opencode runtime'),
+        ce(Badge, { text: status.healthy ? 'healthy' : 'down', ok: status.healthy })
+      ),
+      ce('div', null,
+        ce(Row, { label: 'binary version', value: status.binary_version }),
+        ce(Row, { label: 'listening port', value: status.port }),
+        ce(Row, {
+          label: 'owner worker pid',
+          value: status.pid > 0 ? status.pid : '— (attached worker)',
+          badge: status.pid === 0
+            ? ce('span', { className: 'text-xs text-slate-500' }, 'this worker did not spawn')
+            : null,
+        })
+      )
+    ),
+
+    ce(Card, null,
+      ce('h3', { className: 'text-white font-medium mb-2' }, 'Notes'),
+      ce('ul', { className: 'text-sm text-slate-400 space-y-1 list-disc list-inside' },
+        ce('li', null, 'Plugin embeds an opencode binary as a long-lived subprocess (one server, shared across BaluHost workers).'),
+        ce('li', null, 'Chat goes through ', ce('code', { className: 'text-slate-300' }, 'POST /chat/v2/{project_id}'), ' (synchronous JSON). SSE streaming is a v0.3.0 candidate.'),
+        ce('li', null, 'Sessions persist via opencode\'s own storage; mapping to BaluHost projects lives in projects.opencode_session_id.'),
+      )
+    ),
+
+    ce('div', { className: 'flex items-center gap-3 text-xs text-slate-500' },
+      secsAgo !== null ? ce('span', null, `Updated ${secsAgo}s ago`) : null,
+      ce('span', null, '· auto-refresh every 5s')
+    )
+  );
+}
+
 // ── Stats tab ─────────────────────────────────────────────────────────────────
 
 function TurnBanner() {
@@ -598,6 +666,7 @@ const TABS = [
   { id: 'models',   label: 'Models' },
   { id: 'projects', label: 'Projects' },
   { id: 'config',   label: 'Config' },
+  { id: 'runtime',  label: 'Runtime' },
   { id: 'logs',     label: 'Logs' },
   { id: 'system',   label: 'System' },
   { id: 'stats',    label: 'Stats' },
@@ -610,6 +679,7 @@ function BaluCode({ user }) {
     models:   ce(ModelsTab),
     projects: ce(ProjectsTab),
     config:   ce(ConfigTab),
+    runtime:  ce(RuntimeTab),
     logs:     ce(LogsTab),
     system:   ce(SystemTab),
     stats:    ce(StatsTab),
