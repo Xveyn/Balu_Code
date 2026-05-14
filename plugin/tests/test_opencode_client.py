@@ -1,6 +1,8 @@
 # plugin/tests/test_opencode_client.py
 from __future__ import annotations
 
+import base64
+
 import httpx
 import pytest
 import respx
@@ -97,3 +99,47 @@ async def test_session_abort_posts_to_abort_endpoint():
             )
             await client.session_abort("ses_abc")
             assert route.called
+
+
+@pytest.mark.asyncio
+async def test_health_sends_basic_auth_header_when_password_set():
+    async with OpencodeClient("http://127.0.0.1:4096", password="secret-pw") as client:
+        with respx.mock(base_url="http://127.0.0.1:4096") as mock:
+            route = mock.get("/global/health").mock(
+                return_value=httpx.Response(200, json={})
+            )
+            await client.health()
+            expected = b"Basic " + base64.b64encode(b"opencode:secret-pw")
+            assert route.calls.last.request.headers["authorization"].encode() == expected
+
+
+@pytest.mark.asyncio
+async def test_no_authorization_header_when_password_omitted():
+    async with OpencodeClient("http://127.0.0.1:4096") as client:
+        with respx.mock(base_url="http://127.0.0.1:4096") as mock:
+            route = mock.get("/global/health").mock(
+                return_value=httpx.Response(200, json={})
+            )
+            await client.health()
+            assert "authorization" not in (
+                k.lower() for k in route.calls.last.request.headers
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_session_sends_basic_auth_header():
+    async with OpencodeClient("http://127.0.0.1:4096", password="pw2") as client:
+        with respx.mock(base_url="http://127.0.0.1:4096") as mock:
+            route = mock.post("/session").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "id": "ses_abc",
+                        "time": {"created": 0, "updated": 0},
+                        "version": "1.14.50",
+                    },
+                )
+            )
+            await client.create_session()
+            expected = b"Basic " + base64.b64encode(b"opencode:pw2")
+            assert route.calls.last.request.headers["authorization"].encode() == expected
