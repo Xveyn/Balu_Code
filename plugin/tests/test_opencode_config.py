@@ -14,8 +14,17 @@ def test_maps_ollama_url_and_default_model():
     )
     result = to_opencode_config(cfg, file_write_allowed=True)
     assert result["model"] == "ollama/qwen2.5-coder:32b"
-    assert result["provider"]["ollama"]["options"]["baseURL"] == "http://10.0.0.5:11434"
+    # opencode's ollama-ai-provider-v2 expects baseURL ending in /api
+    assert result["provider"]["ollama"]["options"]["baseURL"] == "http://10.0.0.5:11434/api"
+    assert result["provider"]["ollama"]["npm"] == "ollama-ai-provider-v2"
+    assert "qwen2.5-coder:32b" in result["provider"]["ollama"]["models"]
     assert "permission" not in result or result["permission"] == {}
+
+
+def test_url_with_trailing_slash_or_api_is_normalized():
+    cfg = BaluCodePluginConfig(ollama_base_url="http://x:1/api/")
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    assert result["provider"]["ollama"]["options"]["baseURL"] == "http://x:1/api"
 
 
 def test_readonly_locks_down_edit_and_bash_when_write_denied():

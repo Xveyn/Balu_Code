@@ -25,12 +25,29 @@ def to_opencode_config(
     *,
     file_write_allowed: bool,
 ) -> dict:
-    """Build an opencode.json dict from plugin config + permission state."""
+    """Build an opencode.json dict from plugin config + permission state.
+
+    opencode wires up custom providers via the AI SDK ecosystem: each
+    provider block needs `npm` (the npm package that implements it),
+    `name`, `options` (passed verbatim to the SDK constructor), and a
+    `models` dict listing the models we expose. For Ollama we use
+    `ollama-ai-provider-v2`. Without these fields opencode silently
+    drops the provider — only opencode's default model surface remains.
+    """
+    base_url = cfg.ollama_base_url.rstrip("/")
+    if not base_url.endswith("/api"):
+        base_url = f"{base_url}/api"
+
     out: dict = {
         "model": f"ollama/{cfg.chat_model}",
         "provider": {
             "ollama": {
-                "options": {"baseURL": cfg.ollama_base_url},
+                "npm": "ollama-ai-provider-v2",
+                "name": "Ollama (local)",
+                "options": {"baseURL": base_url},
+                "models": {
+                    cfg.chat_model: {"name": cfg.chat_model},
+                },
             },
         },
     }
