@@ -53,6 +53,7 @@ from .schemas import (
     ProjectCreate,
     ProjectsResponse,
     RepoMapResponse,
+    RuntimeStatusResponse,
     StatsResponse,
     SystemResponse,
     ToolStat,
@@ -61,6 +62,7 @@ from .schemas import (
 from .services.agent_loop import TurnContext, TurnDeps, run_turn
 from .services.cancel import CancelToken
 from .services.config_store import save_plugin_config
+from .services.opencode_runtime import OPENCODE_VERSION
 from .services.index_jobs import (
     AlreadyIndexingError,
     IndexJob,
@@ -619,6 +621,26 @@ def build_router() -> APIRouter:
         session_id = await bridge.get_or_create(project_id)
         await client.session_abort(session_id)
         return {"status": "aborted"}
+
+    @router.get("/runtime/status", response_model=RuntimeStatusResponse, tags=["balu_code"])
+    async def runtime_status():
+        from .deps import get_opencode_client, get_opencode_handle
+        handle = get_opencode_handle()
+        client = get_opencode_client()
+        healthy = await client.health()
+        return RuntimeStatusResponse(
+            healthy=healthy,
+            port=handle.port,
+            pid=handle.pid,
+            binary_version=OPENCODE_VERSION,
+        )
+
+    @router.post("/runtime/restart", tags=["balu_code"])
+    async def runtime_restart():
+        raise HTTPException(
+            status_code=501,
+            detail="manual restart not implemented; rely on watchdog",
+        )
 
     return router
 

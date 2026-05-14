@@ -96,3 +96,29 @@ def test_chat_v2_uses_plugin_default_model_when_not_provided(app_with_mocked_cli
     _, kwargs = fake_client.prompt.call_args
     assert kwargs["model_provider"] == "ollama"
     assert kwargs["model_id"] == "llama3:8b"
+
+
+def test_runtime_status_returns_health_and_pid(app_with_mocked_client, monkeypatch):
+    app, _, fake_client = app_with_mocked_client
+    fake_client.health = AsyncMock(return_value=True)
+
+    class _H:
+        port = 4096
+        pid = 12345
+
+    monkeypatch.setattr("plugin.deps.get_opencode_handle", lambda: _H())
+    with TestClient(app) as client:
+        resp = client.get("/runtime/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["healthy"] is True
+        assert body["port"] == 4096
+        assert body["pid"] == 12345
+        assert body["binary_version"] == "1.14.50"
+
+
+def test_runtime_restart_returns_501(app_with_mocked_client):
+    app, _, _ = app_with_mocked_client
+    with TestClient(app) as client:
+        resp = client.post("/runtime/restart")
+        assert resp.status_code == 501

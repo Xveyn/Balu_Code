@@ -161,6 +161,13 @@ class ChatV2Request(BaseModel):
     model: str | None = None  # "provider/modelID"; falls back to plugin default
 
 
+class RuntimeStatusResponse(BaseModel):
+    healthy: bool
+    port: int
+    pid: int
+    binary_version: str
+
+
 __all__ = [
     "ApprovalSummary",
     "ChatV2Message",
@@ -179,6 +186,7 @@ __all__ = [
     "ProjectCreate",
     "ProjectsResponse",
     "RepoMapResponse",
+    "RuntimeStatusResponse",
     "StatsResponse",
     "SystemResponse",
     "ToolStat",
