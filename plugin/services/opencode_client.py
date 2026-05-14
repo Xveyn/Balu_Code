@@ -39,5 +39,22 @@ class OpencodeClient:
         except (httpx.HTTPError, OSError):
             return False
 
+    async def create_session(self, *, title: str | None = None) -> str:
+        """Create a new session in the opencode server's current project.
+
+        opencode v1.14.50 does NOT accept a directory in the POST /session body.
+        The session inherits its working directory from the server's project
+        (set via the CWD where `opencode serve` was launched). To change project,
+        the server must be restarted with a different CWD.
+
+        Returns the session id (matches pattern ^ses).
+        """
+        body: dict[str, str] = {}
+        if title is not None:
+            body["title"] = title
+        resp = await self._client.post("/session", json=body)
+        resp.raise_for_status()
+        return resp.json()["id"]
+
 
 __all__ = ["OpencodeClient"]
