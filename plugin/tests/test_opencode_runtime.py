@@ -95,7 +95,7 @@ async def test_ensure_binary_skips_when_present_and_valid(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-async def _stub_wait_healthy(host, port, timeout):
+async def _stub_wait_healthy(host, port, timeout, *, password=None):
     return True
 
 
@@ -192,7 +192,7 @@ async def test_start_or_attach_skips_spawn_when_already_healthy(tmp_path, monkey
     log = tmp_path / "opencode.log"
     lock = tmp_path / "runtime.lock"
 
-    async def probe_returns_true(host, port, *, timeout):
+    async def probe_returns_true(host, port, *, timeout, password=None):
         return True
 
     monkeypatch.setattr(rt, "_probe_health", probe_returns_true)
@@ -232,7 +232,7 @@ async def test_start_or_attach_spawns_when_no_existing_server(tmp_path, monkeypa
     log = tmp_path / "opencode.log"
     lock = tmp_path / "runtime.lock"
 
-    async def probe_returns_false(host, port, *, timeout):
+    async def probe_returns_false(host, port, *, timeout, password=None):
         return False
 
     monkeypatch.setattr(rt, "_probe_health", probe_returns_false)
@@ -274,10 +274,10 @@ async def test_start_or_attach_waits_when_lock_held(tmp_path, monkeypatch):
 
     health_calls = []
 
-    async def probe_returns_false(host, port, *, timeout):
+    async def probe_returns_false(host, port, *, timeout, password=None):
         return False
 
-    async def wait_returns_true_after_called(host, port, *, timeout):
+    async def wait_returns_true_after_called(host, port, timeout, *, password=None):
         health_calls.append(1)
         return True
 
@@ -341,3 +341,67 @@ async def test_watchdog_gives_up_after_max_restarts():
     )
     with pytest.raises(RuntimeError, match="degraded state"):
         await asyncio.wait_for(wd.run(), timeout=1.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.path.exists("/proc/self/environ"), reason="Linux /proc not available")
+async def test_start_server_passes_password_env(tmp_path, monkeypatch):
+    fake = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    log = tmp_path / "opencode.log"
+
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+
+    handle = await rt.start_server(
+        binary=fake,
+        config_dir=cfg_dir,
+        log_path=log,
+        port=4096,
+        ready_timeout=2.0,
+        password="super-secret-pw",
+    )
+    try:
+        await asyncio.sleep(0.1)
+        import pathlib
+
+        env_data = pathlib.Path(f"/proc/{handle.pid}/environ").read_bytes().split(b"\x00")
+        env_dict = dict(e.decode().split("=", 1) for e in env_data if b"=" in e)
+        assert env_dict.get("OPENCODE_SERVER_PASSWORD") == "super-secret-pw"
+    finally:
+        await rt.stop_server(handle)
+
+
+@pytest.mark.asyncio
+async def test_start_server_omits_password_env_when_none(tmp_path, monkeypatch):
+    """When password is None, OPENCODE_SERVER_PASSWORD must NOT be set."""
+    fake = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nsleep 30\n")
+    fake.chmod(0o755)
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    log = tmp_path / "opencode.log"
+
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+    monkeypatch.delenv("OPENCODE_SERVER_PASSWORD", raising=False)
+
+    handle = await rt.start_server(
+        binary=fake, config_dir=cfg_dir, log_path=log, port=4096, ready_timeout=2.0
+    )
+    try:
+        await asyncio.sleep(0.1)
+        import pathlib
+
+        environ_file = pathlib.Path(f"/proc/{handle.pid}/environ")
+        if environ_file.exists():
+            env_data = environ_file.read_bytes().split(b"\x00")
+            env_dict = dict(e.decode().split("=", 1) for e in env_data if b"=" in e)
+            assert "OPENCODE_SERVER_PASSWORD" not in env_dict
+    finally:
+        await rt.stop_server(handle)

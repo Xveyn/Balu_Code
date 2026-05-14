@@ -153,9 +153,14 @@ async def start_server(
     port: int = 4096,
     hostname: str = "127.0.0.1",
     ready_timeout: float = 15.0,
+    password: str | None = None,
 ) -> ServerHandle:
     """Spawn `opencode serve --port <port> --hostname <host>` with OPENCODE_CONFIG_DIR
     pointing at `config_dir`, then poll /global/health until ready.
+
+    When ``password`` is set, ``OPENCODE_SERVER_PASSWORD`` is exported into
+    the child env, which enables HTTP Basic Auth on every endpoint. The
+    health probe uses the same credentials so readiness still resolves.
 
     opencode v1.14.50 has no --config flag; configuration is loaded from
     `<OPENCODE_CONFIG_DIR>/opencode.json` (or `.opencode/` subdirectory).
@@ -165,6 +170,10 @@ async def start_server(
     log_fd = log_file.fileno()
 
     env = {**os.environ, "OPENCODE_CONFIG_DIR": str(config_dir)}
+    if password is not None:
+        env["OPENCODE_SERVER_PASSWORD"] = password
+    else:
+        env.pop("OPENCODE_SERVER_PASSWORD", None)
     proc = await _spawn(
         str(binary),
         "serve",
@@ -179,7 +188,7 @@ async def start_server(
     )
 
     actual_port = port if port > 0 else _read_port_from_log(log_path, timeout=5.0)
-    healthy = await _wait_for_health(hostname, actual_port, timeout=ready_timeout)
+    healthy = await _wait_for_health(hostname, actual_port, timeout=ready_timeout, password=password)
     if not healthy:
         proc.terminate()
         try:
@@ -206,11 +215,14 @@ async def stop_server(handle: ServerHandle, *, grace_seconds: float = 5.0) -> No
         await handle.process.wait()
 
 
-async def _wait_for_health(host: str, port: int, timeout: float) -> bool:
+async def _wait_for_health(
+    host: str, port: int, timeout: float, *, password: str | None = None
+) -> bool:
     """Poll GET /global/health until 200 or timeout."""
     loop = asyncio.get_event_loop()
     deadline = loop.time() + timeout
-    async with httpx.AsyncClient(timeout=2.0) as client:
+    auth = httpx.BasicAuth("opencode", password) if password else None
+    async with httpx.AsyncClient(timeout=2.0, auth=auth) as client:
         while loop.time() < deadline:
             try:
                 resp = await client.get(f"http://{host}:{port}/global/health")
@@ -246,9 +258,10 @@ def _read_port_from_log(log_path: Path, timeout: float) -> int:
 # ---------------------------------------------------------------------------
 
 
-async def _probe_health(host: str, port: int, *, timeout: float) -> bool:
+async def _probe_health(host: str, port: int, *, timeout: float, password: str | None = None) -> bool:
     """One-shot health check. Returns True on 200, False otherwise (no waiting)."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    auth = httpx.BasicAuth("opencode", password) if password else None
+    async with httpx.AsyncClient(timeout=timeout, auth=auth) as client:
         try:
             resp = await client.get(f"http://{host}:{port}/global/health")
             return resp.status_code == 200
@@ -265,18 +278,16 @@ async def start_or_attach_server(
     port: int = 4096,
     hostname: str = "127.0.0.1",
     ready_timeout: float = 20.0,
+    password: str | None = None,
 ) -> ServerHandle:
     """Spawn opencode on `port` if no one else has, else attach to the running one.
 
-    Multi-worker coordination:
-      1. Probe http://hostname:port/global/health. If 200 -> attach.
-      2. Try exclusive non-blocking flock on `lock_path`. If acquired -> spawn.
-         Lock fd is kept open in the returned handle, so the OS releases it
-         only when this process dies.
-      3. If lock already held by another worker -> wait up to ready_timeout
-         for health to come up, then attach. Timeout -> RuntimeError.
+    When ``password`` is provided, every health probe (initial attach check
+    and the post-spawn wait) sends Basic Auth with username ``opencode``.
+    The password is also injected into the child env so a freshly-spawned
+    server runs in authenticated mode.
     """
-    if await _probe_health(hostname, port, timeout=1.0):
+    if await _probe_health(hostname, port, timeout=1.0, password=password):
         return ServerHandle(process=None, port=port, log_fd=None, lock_fd=None)
 
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -285,8 +296,7 @@ async def start_or_attach_server(
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(lock_fd)
-        # Another worker is spawning; wait for it
-        if await _wait_for_health(hostname, port, timeout=ready_timeout):
+        if await _wait_for_health(hostname, port, timeout=ready_timeout, password=password):
             return ServerHandle(process=None, port=port, log_fd=None, lock_fd=None)
         raise RuntimeError(
             f"opencode never reached healthy state on {hostname}:{port} after "
@@ -294,7 +304,6 @@ async def start_or_attach_server(
             f"the server up — check {log_path}"
         ) from None
 
-    # We hold the lock; spawn
     try:
         handle = await start_server(
             binary=binary,
@@ -303,8 +312,8 @@ async def start_or_attach_server(
             port=port,
             hostname=hostname,
             ready_timeout=ready_timeout,
+            password=password,
         )
-        # Attach our lock fd to the handle so it stays open for the process lifetime
         handle.lock_fd = lock_fd
         return handle
     except Exception:
