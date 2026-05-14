@@ -752,6 +752,25 @@ async def test_runtime_credentials_returns_503_when_not_initialised(app_with_rou
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/plugins/balu_code/runtime/credentials")
     assert resp.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_runtime_credentials_requires_authentication(app_with_router):
+    """A 401 from get_current_user must keep the password from being returned."""
+    from fastapi import HTTPException, status
+
+    from app.api.deps import get_current_user
+
+    async def _denied():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    app_with_router.dependency_overrides[get_current_user] = _denied
+    set_opencode_password("must-not-leak")
+    transport = ASGITransport(app=app_with_router)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/plugins/balu_code/runtime/credentials")
+    assert resp.status_code == 401
+    assert "must-not-leak" not in resp.text
 ```
 
 - [ ] **Step 5.3: Run test to verify it fails**
@@ -786,7 +805,9 @@ In `plugin/routes.py`, inside `build_router()`, add a handler near the existing 
         response_model=RuntimeCredentialsResponse,
         tags=["balu_code"],
     )
-    def runtime_credentials() -> RuntimeCredentialsResponse:
+    def runtime_credentials(
+        _user: UserPublic = Depends(get_current_user),
+    ) -> RuntimeCredentialsResponse:
         try:
             password = get_opencode_password()
         except RuntimeError as exc:
@@ -800,13 +821,18 @@ In `plugin/routes.py`, inside `build_router()`, add a handler near the existing 
 At the top of `routes.py`, ensure the imports include:
 
 ```python
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api.deps import get_current_user
+from app.schemas.user import UserPublic
 
 from .deps import get_opencode_password
 from .schemas import RuntimeCredentialsResponse
 ```
 
-(merge with existing import lines; do not duplicate).
+(merge with existing import lines; do not duplicate — `Depends`, `get_current_user`, and `UserPublic` are already imported at the top of `routes.py`).
+
+**Why auth is required here:** unlike `/runtime/status` (metadata only), this endpoint returns the OpenCode Basic Auth password in the response body. Anyone who can reach the plugin's port without a BaluHost JWT would obtain the credential. Adding the `Depends(get_current_user)` matches the pattern used by `/config`, `/logs`, `/projects`, etc. The pre-existing `/runtime/status` and `/runtime/restart` skip auth because they are metadata-only; tightening those is out of scope for this plan and tracked separately.
 
 - [ ] **Step 5.6: Run tests to verify they pass**
 
