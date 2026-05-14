@@ -610,7 +610,7 @@ def test_opencode_password_singleton_roundtrip():
     set_opencode_password("hello-pw")
     assert get_opencode_password() == "hello-pw"
     clear_opencode_password()
-    with pytest.raises(LookupError):
+    with pytest.raises(RuntimeError):
         get_opencode_password()
 ```
 
@@ -634,7 +634,7 @@ def set_opencode_password(password: str) -> None:
 
 def get_opencode_password() -> str:
     if _opencode_password is None:
-        raise LookupError("opencode password not initialised")
+        raise RuntimeError("opencode password not initialized")
     return _opencode_password
 
 
@@ -789,10 +789,10 @@ In `plugin/routes.py`, inside `build_router()`, add a handler near the existing 
     def runtime_credentials() -> RuntimeCredentialsResponse:
         try:
             password = get_opencode_password()
-        except LookupError as exc:
+        except RuntimeError as exc:
             raise HTTPException(
                 status_code=503,
-                detail="opencode runtime not initialised",
+                detail="opencode runtime not initialized",
             ) from exc
         return RuntimeCredentialsResponse(username="opencode", password=password)
 ```
