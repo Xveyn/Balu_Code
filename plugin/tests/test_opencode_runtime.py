@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from plugin.services import opencode_runtime as rt
 
 
@@ -24,6 +26,5 @@ def test_target_triple_detects_linux_x86_64(monkeypatch):
 def test_target_triple_rejects_unsupported(monkeypatch):
     monkeypatch.setattr("platform.system", lambda: "Linux")
     monkeypatch.setattr("platform.machine", lambda: "armv7l")
-    import pytest
     with pytest.raises(rt.UnsupportedPlatformError):
         rt.detect_target_triple()
