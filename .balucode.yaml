@@ -1,8 +1,0 @@
-model: qwen3.6:27b
-project_id: 4
-server_url: http://localhost:8000
-tools:
-  allow_bash: false
-  allow_web_fetch: true
-  allow_write: false
- 

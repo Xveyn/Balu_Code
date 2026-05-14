@@ -33,3 +33,5 @@ env/
 # Plugin-local data
 ~/.local/share/balu-code/
 .aider*
+.balucode.yaml
+CLAUDE.md
