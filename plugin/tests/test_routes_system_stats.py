@@ -1,8 +1,7 @@
-"""Tests for GET /system, GET /turns/current, and GET /stats routes."""
+"""Tests for GET /system and GET /stats routes."""
 
 from __future__ import annotations
 
-from datetime import UTC
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -83,47 +82,6 @@ def test_get_system_gpu_unavailable(tmp_path):
         r = client.get("/api/plugins/balu_code/system")
     assert r.status_code == 200
     assert r.json()["gpu"]["available"] is False
-
-
-# ── /turns/current ────────────────────────────────────────────────────────────
-
-
-def test_turns_current_idle(tmp_path):
-    import plugin.services.active_turn as at
-
-    at._active = None
-    client = TestClient(_make_app(tmp_path))
-    r = client.get("/api/plugins/balu_code/turns/current")
-    assert r.status_code == 200
-    assert r.json()["active"] is False
-
-
-def test_turns_current_active(tmp_path):
-    from datetime import datetime
-
-    import plugin.services.active_turn as at
-    from plugin.services.active_turn import ActiveTurn, set_active
-
-    at._active = None
-    set_active(
-        ActiveTurn(
-            turn_id="t_test",
-            model="qwen2.5-coder:14b",
-            started_at=datetime.now(UTC),
-            iterations=3,
-            username="sven",
-        )
-    )
-    client = TestClient(_make_app(tmp_path))
-    r = client.get("/api/plugins/balu_code/turns/current")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["active"] is True
-    assert body["turn_id"] == "t_test"
-    assert body["iterations"] == 3
-    assert body["model"] == "qwen2.5-coder:14b"
-    assert body["elapsed_seconds"] is not None
-    at._active = None
 
 
 # ── /stats ────────────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 """Balu Code BaluHost plugin.
 
 Loaded at BaluHost startup by PluginManager. Exposes a FastAPI router
-at /api/plugins/balu_code/ — see ``plugin/routes.py``. Owns seven
-singletons: ProjectStore, OllamaClient, RagRegistry, IndexJobTracker,
-ToolRegistry, BaluCodePluginConfig, AuditLogger.
+at /api/plugins/balu_code/ — see ``plugin/routes.py``. Owns singletons:
+ProjectStore, OllamaClient, BaluCodePluginConfig, AuditLogger, and the
+embedded opencode runtime.
 """
 
 from __future__ import annotations
@@ -20,11 +20,8 @@ from .data_dir import resolve_data_dir
 from .deps import clear_opencode, clear_singletons, set_singletons
 from .routes import build_router
 from .services.audit import AuditLogger
-from .services.index_jobs import IndexJobTracker
 from .services.ollama_client import OllamaClient
 from .services.project_store import ProjectStore
-from .services.rag_registry import RagRegistry
-from .services.tools import ToolRegistry, default_registry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -37,9 +34,6 @@ class BaluCodePlugin(PluginBase):
         self._config = BaluCodePluginConfig()
         self._store: ProjectStore | None = None
         self._ollama: OllamaClient | None = None
-        self._rag_registry: RagRegistry | None = None
-        self._index_job_tracker: IndexJobTracker | None = None
-        self._tool_registry: ToolRegistry | None = None
         self._opencode_handle = None
         self._opencode_client = None
 
@@ -89,25 +83,12 @@ class BaluCodePlugin(PluginBase):
         except BaseException:
             store.close()
             raise
-        rag_registry = RagRegistry(
-            data_dir=data_dir,
-            embed_model=self._config.embed_model,
-            ollama=ollama,
-        )
-        index_job_tracker = IndexJobTracker(db_path=data_dir / "jobs.db")
-        tool_registry = default_registry()
         audit_log = AuditLogger(get_audit_logger_db())
         self._store = store
         self._ollama = ollama
-        self._rag_registry = rag_registry
-        self._index_job_tracker = index_job_tracker
-        self._tool_registry = tool_registry
         set_singletons(
             store,
             ollama,
-            rag_registry,
-            index_job_tracker,
-            tool_registry,
             self._config,
             audit_log,
             data_dir,
@@ -155,16 +136,8 @@ class BaluCodePlugin(PluginBase):
         self._opencode_handle = None
         self._opencode_client = None
 
-        if (
-            self._store is None
-            and self._ollama is None
-            and self._rag_registry is None
-            and self._index_job_tracker is None
-            and self._tool_registry is None
-        ):
+        if self._store is None and self._ollama is None:
             return
-        if self._rag_registry is not None:
-            await self._rag_registry.close_all()
         if self._ollama is not None:
             await self._ollama.close()
         if self._store is not None:
@@ -172,9 +145,6 @@ class BaluCodePlugin(PluginBase):
         clear_singletons()
         self._store = None
         self._ollama = None
-        self._rag_registry = None
-        self._index_job_tracker = None
-        self._tool_registry = None
 
 
 __all__ = ["BaluCodePlugin"]

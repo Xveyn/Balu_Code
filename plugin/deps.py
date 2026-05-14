@@ -6,19 +6,13 @@ from pathlib import Path
 
 from .config import BaluCodePluginConfig
 from .services.audit import AuditLogger
-from .services.index_jobs import IndexJobTracker
 from .services.ollama_client import OllamaClient
 from .services.opencode_client import OpencodeClient
 from .services.opencode_runtime import ServerHandle
 from .services.project_store import ProjectStore
-from .services.rag_registry import RagRegistry
-from .services.tools import ToolRegistry
 
 _store: ProjectStore | None = None
 _ollama: OllamaClient | None = None
-_rag_registry: RagRegistry | None = None
-_index_job_tracker: IndexJobTracker | None = None
-_tool_registry: ToolRegistry | None = None
 _plugin_config: BaluCodePluginConfig | None = None
 _audit_log: AuditLogger | None = None
 _data_dir: Path | None = None
@@ -29,33 +23,23 @@ _opencode_client: OpencodeClient | None = None
 def set_singletons(
     store: ProjectStore,
     ollama: OllamaClient,
-    rag_registry: RagRegistry,
-    index_job_tracker: IndexJobTracker,
-    tool_registry: ToolRegistry,
     plugin_config: BaluCodePluginConfig,
     audit_log: AuditLogger,
     data_dir: Path,
 ) -> None:
-    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry
-    global _plugin_config, _audit_log, _data_dir
+    global _store, _ollama, _plugin_config, _audit_log, _data_dir
     _store = store
     _ollama = ollama
-    _rag_registry = rag_registry
-    _index_job_tracker = index_job_tracker
-    _tool_registry = tool_registry
     _plugin_config = plugin_config
     _audit_log = audit_log
     _data_dir = data_dir
 
 
 def clear_singletons() -> None:
-    global _store, _ollama, _rag_registry, _index_job_tracker, _tool_registry
-    global _plugin_config, _audit_log, _data_dir, _opencode_handle, _opencode_client
+    global _store, _ollama, _plugin_config, _audit_log, _data_dir
+    global _opencode_handle, _opencode_client
     _store = None
     _ollama = None
-    _rag_registry = None
-    _index_job_tracker = None
-    _tool_registry = None
     _plugin_config = None
     _audit_log = None
     _data_dir = None
@@ -78,24 +62,6 @@ def get_ollama_client() -> OllamaClient:
     if _ollama is None:
         raise RuntimeError("balu_code plugin not initialized (OllamaClient missing)")
     return _ollama
-
-
-def get_rag_registry() -> RagRegistry:
-    if _rag_registry is None:
-        raise RuntimeError("balu_code plugin not initialized (RagRegistry missing)")
-    return _rag_registry
-
-
-def get_index_job_tracker() -> IndexJobTracker:
-    if _index_job_tracker is None:
-        raise RuntimeError("balu_code plugin not initialized (IndexJobTracker missing)")
-    return _index_job_tracker
-
-
-def get_tool_registry() -> ToolRegistry:
-    if _tool_registry is None:
-        raise RuntimeError("balu_code plugin not initialized (ToolRegistry missing)")
-    return _tool_registry
 
 
 def get_plugin_config() -> BaluCodePluginConfig:
@@ -145,14 +111,11 @@ __all__ = [
     "clear_singletons",
     "get_audit_log",
     "get_data_dir",
-    "get_index_job_tracker",
     "get_ollama_client",
     "get_opencode_client",
     "get_opencode_handle",
     "get_plugin_config",
     "get_project_store",
-    "get_rag_registry",
-    "get_tool_registry",
     "set_opencode",
     "set_singletons",
     "update_plugin_config",

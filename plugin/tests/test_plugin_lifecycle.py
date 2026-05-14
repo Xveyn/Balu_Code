@@ -59,98 +59,6 @@ async def test_shutdown_clears_singletons(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_startup_registers_rag_registry_and_tracker(tmp_path, monkeypatch):
-    from plugin.deps import (
-        clear_singletons,
-        get_index_job_tracker,
-        get_rag_registry,
-    )
-    from plugin.services.index_jobs import IndexJobTracker
-    from plugin.services.rag_registry import RagRegistry
-
-    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
-    clear_singletons()
-    p = BaluCodePlugin()
-    await p.on_startup()
-    try:
-        registry = get_rag_registry()
-        tracker = get_index_job_tracker()
-        assert isinstance(registry, RagRegistry)
-        assert isinstance(tracker, IndexJobTracker)
-    finally:
-        await p.on_shutdown()
-
-
-@pytest.mark.asyncio
-async def test_shutdown_clears_rag_registry_and_tracker(tmp_path, monkeypatch):
-    from plugin.deps import (
-        clear_singletons,
-        get_index_job_tracker,
-        get_rag_registry,
-    )
-
-    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
-    clear_singletons()
-    p = BaluCodePlugin()
-    await p.on_startup()
-    await p.on_shutdown()
-    with pytest.raises(RuntimeError):
-        get_rag_registry()
-    with pytest.raises(RuntimeError):
-        get_index_job_tracker()
-
-
-@pytest.mark.asyncio
-async def test_startup_registers_tool_registry_and_config(tmp_path, monkeypatch):
-    from plugin.deps import (
-        clear_singletons,
-        get_plugin_config,
-        get_tool_registry,
-    )
-    from plugin.services.tools import ToolRegistry
-
-    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
-    clear_singletons()
-    p = BaluCodePlugin()
-    await p.on_startup()
-    try:
-        reg = get_tool_registry()
-        cfg = get_plugin_config()
-        assert isinstance(reg, ToolRegistry)
-        assert reg.names() == [
-            "apply_patch",
-            "glob",
-            "grep",
-            "read_file",
-            "run_bash",
-            "web_fetch",
-            "write_file",
-        ]
-        assert isinstance(cfg, BaluCodePluginConfig)
-    finally:
-        await p.on_shutdown()
-
-
-@pytest.mark.asyncio
-async def test_shutdown_clears_tool_registry_and_config(tmp_path, monkeypatch):
-    from plugin.deps import (
-        clear_singletons,
-        get_plugin_config,
-        get_tool_registry,
-    )
-
-    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
-    clear_singletons()
-    p = BaluCodePlugin()
-    await p.on_startup()
-    await p.on_shutdown()
-    with pytest.raises(RuntimeError):
-        get_tool_registry()
-    with pytest.raises(RuntimeError):
-        get_plugin_config()
-
-
-@pytest.mark.asyncio
 async def test_startup_registers_audit_log(tmp_path, monkeypatch):
     from plugin.deps import clear_singletons, get_audit_log
     from plugin.services.audit import AuditLogger
@@ -177,3 +85,31 @@ async def test_shutdown_clears_audit_log(tmp_path, monkeypatch):
     await p.on_shutdown()
     with pytest.raises(RuntimeError):
         get_audit_log()
+
+
+@pytest.mark.asyncio
+async def test_startup_registers_plugin_config(tmp_path, monkeypatch):
+    from plugin.deps import clear_singletons, get_plugin_config
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    try:
+        cfg = get_plugin_config()
+        assert isinstance(cfg, BaluCodePluginConfig)
+    finally:
+        await p.on_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_clears_plugin_config(tmp_path, monkeypatch):
+    from plugin.deps import clear_singletons, get_plugin_config
+
+    monkeypatch.setenv("BALU_CODE_DATA_DIR", str(tmp_path))
+    clear_singletons()
+    p = BaluCodePlugin()
+    await p.on_startup()
+    await p.on_shutdown()
+    with pytest.raises(RuntimeError):
+        get_plugin_config()

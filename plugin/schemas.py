@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .services.index_jobs import JobStatus
 from .services.ollama_client import OllamaModel
 from .services.project_store import Project
 
@@ -26,31 +25,6 @@ class ProjectsResponse(BaseModel):
 
 class ModelsResponse(BaseModel):
     models: list[OllamaModel]
-
-
-class RepoMapResponse(BaseModel):
-    text: str
-    file_count: int = Field(..., ge=0)
-    truncated_files: list[str] = Field(default_factory=list)
-    total_bytes: int = Field(..., ge=0)
-
-
-class IndexJobResponse(BaseModel):
-    job_id: str
-    project_id: int
-    status: JobStatus
-
-
-class IndexStatusResponse(BaseModel):
-    job_id: str
-    project_id: int
-    status: JobStatus
-    files_total: int
-    files_processed: int
-    chunks_total: int  # chunks upserted in this run, not total chunks in the index
-    error: str | None = None
-    started_at: str | None = None
-    finished_at: str | None = None
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -109,16 +83,6 @@ class SystemResponse(BaseModel):
     gpu: GpuInfo
 
 
-class TurnCurrentResponse(BaseModel):
-    active: bool
-    turn_id: str | None = None
-    model: str | None = None
-    started_at: str | None = None
-    elapsed_seconds: int | None = None
-    iterations: int | None = None
-    username: str | None = None
-
-
 class DayStat(BaseModel):
     date: str
     requests: int
@@ -175,8 +139,6 @@ __all__ = [
     "ConfigUpdateRequest",
     "DayStat",
     "GpuInfo",
-    "IndexJobResponse",
-    "IndexStatusResponse",
     "LoadedModel",
     "LogEntry",
     "LogsResponse",
@@ -185,10 +147,8 @@ __all__ = [
     "OllamaSystemInfo",
     "ProjectCreate",
     "ProjectsResponse",
-    "RepoMapResponse",
     "RuntimeStatusResponse",
     "StatsResponse",
     "SystemResponse",
     "ToolStat",
-    "TurnCurrentResponse",
 ]
