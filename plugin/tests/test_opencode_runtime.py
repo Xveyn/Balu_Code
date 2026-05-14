@@ -178,6 +178,124 @@ async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Multi-worker coordination
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_start_or_attach_skips_spawn_when_already_healthy(tmp_path, monkeypatch):
+    fake_binary = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake_binary.parent.mkdir(parents=True)
+    fake_binary.write_text("#!/bin/sh\necho should-not-run\n")
+    fake_binary.chmod(0o755)
+    cfg_dir = tmp_path
+    log = tmp_path / "opencode.log"
+    lock = tmp_path / "runtime.lock"
+
+    async def probe_returns_true(host, port, *, timeout):
+        return True
+
+    monkeypatch.setattr(rt, "_probe_health", probe_returns_true)
+
+    # If we tried to spawn, the fake binary would just print, but health
+    # would not become true. Verify start_server is NOT called.
+    spawn_called = []
+    async def fail_start(*a, **kw):
+        spawn_called.append(1)
+        raise AssertionError("must not spawn when health already up")
+    monkeypatch.setattr(rt, "start_server", fail_start)
+
+    handle = await rt.start_or_attach_server(
+        binary=fake_binary,
+        config_dir=cfg_dir,
+        log_path=log,
+        lock_path=lock,
+        port=4096,
+        ready_timeout=1.0,
+    )
+    assert handle.owned is False
+    assert handle.port == 4096
+    assert handle.process is None
+    # No need to stop — attached
+    await rt.stop_server(handle)  # no-op
+
+
+@pytest.mark.asyncio
+async def test_start_or_attach_spawns_when_no_existing_server(tmp_path, monkeypatch):
+    fake_binary = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake_binary.parent.mkdir(parents=True)
+    fake_binary.write_text("#!/bin/sh\nsleep 30\n")
+    fake_binary.chmod(0o755)
+    cfg_dir = tmp_path
+    log = tmp_path / "opencode.log"
+    lock = tmp_path / "runtime.lock"
+
+    async def probe_returns_false(host, port, *, timeout):
+        return False
+
+    monkeypatch.setattr(rt, "_probe_health", probe_returns_false)
+    monkeypatch.setattr(rt, "_wait_for_health", _stub_wait_healthy)
+    monkeypatch.setattr(rt, "_read_port_from_log", lambda *a, **kw: 4096)
+
+    handle = await rt.start_or_attach_server(
+        binary=fake_binary,
+        config_dir=cfg_dir,
+        log_path=log,
+        lock_path=lock,
+        port=4096,
+        ready_timeout=2.0,
+    )
+    try:
+        assert handle.owned is True
+        assert handle.process is not None
+        assert handle.lock_fd is not None
+    finally:
+        await rt.stop_server(handle)
+
+
+@pytest.mark.asyncio
+async def test_start_or_attach_waits_when_lock_held(tmp_path, monkeypatch):
+    import fcntl, os
+    fake_binary = tmp_path / "runtime" / "opencode-linux-x86_64"
+    fake_binary.parent.mkdir(parents=True)
+    fake_binary.write_text("#!/bin/sh\necho noop\n")
+    fake_binary.chmod(0o755)
+    cfg_dir = tmp_path
+    log = tmp_path / "opencode.log"
+    lock = tmp_path / "runtime.lock"
+
+    # Pre-acquire the lock as a "competing worker"
+    other_fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(other_fd, fcntl.LOCK_EX)
+
+    health_calls = []
+    async def probe_returns_false(host, port, *, timeout):
+        return False
+
+    async def wait_returns_true_after_called(host, port, *, timeout):
+        health_calls.append(1)
+        return True
+
+    monkeypatch.setattr(rt, "_probe_health", probe_returns_false)
+    monkeypatch.setattr(rt, "_wait_for_health", wait_returns_true_after_called)
+
+    handle = await rt.start_or_attach_server(
+        binary=fake_binary,
+        config_dir=cfg_dir,
+        log_path=log,
+        lock_path=lock,
+        port=4096,
+        ready_timeout=1.0,
+    )
+    assert handle.owned is False  # attached, didn't spawn
+    assert len(health_calls) == 1
+
+    # cleanup
+    fcntl.flock(other_fd, fcntl.LOCK_UN)
+    os.close(other_fd)
+
+
 @pytest.mark.asyncio
 async def test_watchdog_restarts_on_unhealthy():
     health_results = iter([True, False, True, True, True, True, True, True, True, True])

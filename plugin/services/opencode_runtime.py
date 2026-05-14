@@ -7,6 +7,7 @@ integration smoke test, ship.
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import io
 import os
@@ -126,13 +127,20 @@ def _verify_checksum(path: Path, expected: str) -> bool:
 
 @dataclass
 class ServerHandle:
-    process: asyncio.subprocess.Process
+    process: asyncio.subprocess.Process | None  # None = attached, not owned
     port: int
-    log_fd: int
+    log_fd: int | None  # None when attached
+    lock_fd: int | None = None  # Owner-only: holds the spawn lock; released on process exit
 
     @property
     def pid(self) -> int:
+        if self.process is None:
+            return 0  # attached — no owning process
         return self.process.pid
+
+    @property
+    def owned(self) -> bool:
+        return self.process is not None
 
 
 async def start_server(
@@ -185,6 +193,8 @@ async def start_server(
 
 async def stop_server(handle: ServerHandle, *, grace_seconds: float = 5.0) -> None:
     """SIGTERM, wait grace, SIGKILL if needed."""
+    if handle.process is None:
+        return  # attached; don't kill someone else's opencode
     if handle.process.returncode is not None:
         return
     handle.process.send_signal(signal.SIGTERM)
@@ -228,6 +238,77 @@ def _read_port_from_log(log_path: Path, timeout: float) -> int:
                     return int(m.group(1))
         time.sleep(0.1)
     raise RuntimeError(f"could not detect opencode port from log {log_path}")
+
+
+# ---------------------------------------------------------------------------
+# Multi-worker coordination
+# ---------------------------------------------------------------------------
+
+
+async def _probe_health(host: str, port: int, *, timeout: float) -> bool:
+    """One-shot health check. Returns True on 200, False otherwise (no waiting)."""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            resp = await client.get(f"http://{host}:{port}/global/health")
+            return resp.status_code == 200
+        except (httpx.HTTPError, OSError):
+            return False
+
+
+async def start_or_attach_server(
+    *,
+    binary: Path,
+    config_dir: Path,
+    log_path: Path,
+    lock_path: Path,
+    port: int = 4096,
+    hostname: str = "127.0.0.1",
+    ready_timeout: float = 20.0,
+) -> ServerHandle:
+    """Spawn opencode on `port` if no one else has, else attach to the running one.
+
+    Multi-worker coordination:
+      1. Probe http://hostname:port/global/health. If 200 -> attach.
+      2. Try exclusive non-blocking flock on `lock_path`. If acquired -> spawn.
+         Lock fd is kept open in the returned handle, so the OS releases it
+         only when this process dies.
+      3. If lock already held by another worker -> wait up to ready_timeout
+         for health to come up, then attach. Timeout -> RuntimeError.
+    """
+    if await _probe_health(hostname, port, timeout=1.0):
+        return ServerHandle(process=None, port=port, log_fd=None, lock_fd=None)
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(lock_fd)
+        # Another worker is spawning; wait for it
+        if await _wait_for_health(hostname, port, timeout=ready_timeout):
+            return ServerHandle(process=None, port=port, log_fd=None, lock_fd=None)
+        raise RuntimeError(
+            f"opencode never reached healthy state on {hostname}:{port} after "
+            f"{ready_timeout}s; another worker holds the lock but did not bring "
+            f"the server up — check {log_path}"
+        )
+
+    # We hold the lock; spawn
+    try:
+        handle = await start_server(
+            binary=binary,
+            config_dir=config_dir,
+            log_path=log_path,
+            port=port,
+            hostname=hostname,
+            ready_timeout=ready_timeout,
+        )
+        # Attach our lock fd to the handle so it stays open for the process lifetime
+        handle.lock_fd = lock_fd
+        return handle
+    except Exception:
+        os.close(lock_fd)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +364,7 @@ __all__ = [
     "binary_path",
     "detect_target_triple",
     "ensure_binary",
+    "start_or_attach_server",
     "start_server",
     "stop_server",
 ]
