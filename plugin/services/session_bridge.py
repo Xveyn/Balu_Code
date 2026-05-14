@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from plugin.services.project_store import ProjectStore
+from .project_store import ProjectStore
 
 
 @dataclass
