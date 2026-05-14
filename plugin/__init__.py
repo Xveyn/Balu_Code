@@ -98,10 +98,10 @@ class BaluCodePlugin(PluginBase):
         # CWD defaults to data_dir; routes may restart opencode in a project's
         # root_path when a different project becomes active (single-server
         # single-current-project model — see spec section "Plan deviations").
-        from .services.opencode_runtime import ensure_binary, start_or_attach_server
+        from .deps import set_opencode
         from .services.opencode_client import OpencodeClient
         from .services.opencode_config import write_opencode_config
-        from .deps import set_opencode
+        from .services.opencode_runtime import ensure_binary, start_or_attach_server
 
         # Phase A: treat as allowed; Phase B wires the real BaluHost permission check.
         file_write_allowed = True

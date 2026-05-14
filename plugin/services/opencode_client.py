@@ -6,6 +6,7 @@ Endpoints used (see docs/superpowers/references/opencode-openapi.json):
   POST /session/{id}/message    (synchronous — blocks until turn completes)
   POST /session/{id}/abort
 """
+
 from __future__ import annotations
 
 import httpx
@@ -19,9 +20,7 @@ class OpencodeClient:
         timeout: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._client = httpx.AsyncClient(
-            base_url=base_url, timeout=timeout, transport=transport
-        )
+        self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
 
     async def __aenter__(self) -> OpencodeClient:
         return self

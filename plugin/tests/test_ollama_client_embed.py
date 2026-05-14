@@ -97,7 +97,6 @@ async def test_embed_missing_embedding_field_raises_unreachable():
 @pytest.mark.asyncio
 async def test_embed_context_length_error_truncates_and_retries():
     """When Ollama returns 500 'context length exceeded', embed() halves the text and retries."""
-    from plugin.services.ollama_client import OllamaUnreachable
 
     prompts_seen: list[str] = []
 

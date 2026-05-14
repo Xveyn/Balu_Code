@@ -1,4 +1,5 @@
 """Tests for opencode.json config mapping."""
+
 from __future__ import annotations
 
 import json

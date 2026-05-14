@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 PLUGIN_JSON = REPO_ROOT / "plugin" / "plugin.json"
-CLI_PYPROJECT = REPO_ROOT / "cli" / "pyproject.toml"
 CHANGELOG = REPO_ROOT / "docs" / "CHANGELOG.md"
 
 
@@ -38,12 +36,6 @@ def bump_plugin_json(version: str) -> None:
     PLUGIN_JSON.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def bump_pyproject(version: str) -> None:
-    text = CLI_PYPROJECT.read_text()
-    text = re.sub(r'^version = ".*"', f'version = "{version}"', text, flags=re.MULTILINE)
-    CLI_PYPROJECT.write_text(text)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Bump version, commit, tag, push.")
     parser.add_argument("--version", required=True, help="Version string, e.g. 0.1.0 or v0.1.0")
@@ -52,9 +44,8 @@ def main() -> None:
 
     check_clean_tree()
     bump_plugin_json(version)
-    bump_pyproject(version)
 
-    run(["git", "add", str(PLUGIN_JSON), str(CLI_PYPROJECT)])
+    run(["git", "add", str(PLUGIN_JSON)])
     run(["git", "commit", "-m", f"chore(release): v{version}"])
     run(["git", "tag", f"v{version}"])
     run(["git", "push", "origin", "main", "--tags"])

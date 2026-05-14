@@ -1,6 +1,9 @@
 # plugin/tests/test_opencode_runtime.py
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import os
 import re
 
 import httpx
@@ -69,6 +72,7 @@ async def test_ensure_binary_downloads_when_missing(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_ensure_binary_skips_when_present_and_valid(tmp_path, monkeypatch):
     import hashlib as _h
+
     fake_bytes = b"#!/bin/sh\necho cached\n"
     fake_checksum = "sha256:" + _h.sha256(fake_bytes).hexdigest()
     monkeypatch.setitem(rt.BINARY_CHECKSUMS, "linux-x86_64", fake_checksum)
@@ -89,8 +93,6 @@ async def test_ensure_binary_skips_when_present_and_valid(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 # Task 5: server lifecycle
 # ---------------------------------------------------------------------------
-import asyncio
-import os
 
 
 async def _stub_wait_healthy(host, port, timeout):
@@ -140,9 +142,7 @@ async def test_stop_server_terminates_process(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not os.path.exists("/proc/self/environ"), reason="Linux /proc not available"
-)
+@pytest.mark.skipif(not os.path.exists("/proc/self/environ"), reason="Linux /proc not available")
 async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
     """Verify start_server passes OPENCODE_CONFIG_DIR env var to child process."""
     fake = tmp_path / "runtime" / "opencode-linux-x86_64"
@@ -162,12 +162,11 @@ async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
     try:
         await asyncio.sleep(0.1)
         import pathlib
+
         environ_file = pathlib.Path(f"/proc/{handle.pid}/environ")
         if environ_file.exists():
             env_data = environ_file.read_bytes().split(b"\x00")
-            env_dict = dict(
-                e.decode().split("=", 1) for e in env_data if b"=" in e
-            )
+            env_dict = dict(e.decode().split("=", 1) for e in env_data if b"=" in e)
             assert env_dict.get("OPENCODE_CONFIG_DIR") == str(cfg_dir)
     finally:
         await rt.stop_server(handle)
@@ -201,9 +200,11 @@ async def test_start_or_attach_skips_spawn_when_already_healthy(tmp_path, monkey
     # If we tried to spawn, the fake binary would just print, but health
     # would not become true. Verify start_server is NOT called.
     spawn_called = []
+
     async def fail_start(*a, **kw):
         spawn_called.append(1)
         raise AssertionError("must not spawn when health already up")
+
     monkeypatch.setattr(rt, "start_server", fail_start)
 
     handle = await rt.start_or_attach_server(
@@ -256,7 +257,9 @@ async def test_start_or_attach_spawns_when_no_existing_server(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_start_or_attach_waits_when_lock_held(tmp_path, monkeypatch):
-    import fcntl, os
+    import fcntl
+    import os
+
     fake_binary = tmp_path / "runtime" / "opencode-linux-x86_64"
     fake_binary.parent.mkdir(parents=True)
     fake_binary.write_text("#!/bin/sh\necho noop\n")
@@ -270,6 +273,7 @@ async def test_start_or_attach_waits_when_lock_held(tmp_path, monkeypatch):
     fcntl.flock(other_fd, fcntl.LOCK_EX)
 
     health_calls = []
+
     async def probe_returns_false(host, port, *, timeout):
         return False
 
@@ -300,6 +304,7 @@ async def test_start_or_attach_waits_when_lock_held(tmp_path, monkeypatch):
 async def test_watchdog_restarts_on_unhealthy():
     health_results = iter([True, False, True, True, True, True, True, True, True, True])
     restart_calls = []
+
     async def fake_restart():
         restart_calls.append(1)
 
@@ -313,10 +318,8 @@ async def test_watchdog_restarts_on_unhealthy():
     task = asyncio.create_task(wd.run())
     await asyncio.sleep(0.15)
     task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
     assert len(restart_calls) >= 1
 
@@ -325,6 +328,7 @@ async def test_watchdog_restarts_on_unhealthy():
 async def test_watchdog_gives_up_after_max_restarts():
     async def always_unhealthy():
         return False
+
     async def fake_restart():
         pass
 

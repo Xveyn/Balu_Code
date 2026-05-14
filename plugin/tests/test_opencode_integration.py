@@ -7,6 +7,7 @@ Run with:
 The session-send test additionally requires Ollama running locally with the
 configured model pulled.
 """
+
 from __future__ import annotations
 
 import os

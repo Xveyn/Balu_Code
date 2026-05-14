@@ -11,6 +11,7 @@ the session inherits the working directory from the opencode server's CWD
 restarting the server in the right CWD when a project becomes active —
 that's a Task 13 concern.
 """
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

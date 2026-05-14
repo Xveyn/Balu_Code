@@ -4,6 +4,7 @@ Pinned to a specific opencode version. Bumping the version is an explicit
 plugin release step: update OPENCODE_VERSION and BINARY_CHECKSUMS, run the
 integration smoke test, ship.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -86,7 +87,9 @@ async def ensure_binary(
     url = _DOWNLOAD_URL_TEMPLATE.format(
         version=OPENCODE_VERSION, asset_triple=_UPSTREAM_TRIPLE[triple]
     )
-    async with httpx.AsyncClient(transport=transport, timeout=120.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        transport=transport, timeout=120.0, follow_redirects=True
+    ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         data = resp.content
@@ -94,8 +97,7 @@ async def ensure_binary(
     # Extract the opencode binary from the tarball
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
         members = [
-            m for m in tar.getmembers()
-            if m.isfile() and m.name.rstrip("/").endswith("opencode")
+            m for m in tar.getmembers() if m.isfile() and m.name.rstrip("/").endswith("opencode")
         ]
         if not members:
             raise RuntimeError("no opencode binary found inside tarball")
@@ -182,11 +184,10 @@ async def start_server(
         proc.terminate()
         try:
             await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
         raise RuntimeError(
-            f"opencode server did not become healthy within {ready_timeout}s — "
-            f"check {log_path}"
+            f"opencode server did not become healthy within {ready_timeout}s — " f"check {log_path}"
         )
     return ServerHandle(process=proc, port=actual_port, log_fd=log_fd)
 
@@ -200,7 +201,7 @@ async def stop_server(handle: ServerHandle, *, grace_seconds: float = 5.0) -> No
     handle.process.send_signal(signal.SIGTERM)
     try:
         await asyncio.wait_for(handle.process.wait(), timeout=grace_seconds)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         handle.process.kill()
         await handle.process.wait()
 
@@ -291,7 +292,7 @@ async def start_or_attach_server(
             f"opencode never reached healthy state on {hostname}:{port} after "
             f"{ready_timeout}s; another worker holds the lock but did not bring "
             f"the server up — check {log_path}"
-        )
+        ) from None
 
     # We hold the lock; spawn
     try:
@@ -319,6 +320,7 @@ async def start_or_attach_server(
 @dataclass
 class Watchdog:
     """Poll health on interval, restart on failure, give up after max_restarts in window."""
+
     is_healthy: Callable[[], bool] | Callable[[], Awaitable[bool]]
     restart: Callable[[], Awaitable[None]]
     poll_interval: float = 30.0

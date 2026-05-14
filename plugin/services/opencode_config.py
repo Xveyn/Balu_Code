@@ -12,6 +12,7 @@ For v0.2.0 we map only the fields Sven actually uses:
 Other opencode config keys (lsp, formatter, agents, mcp, …) are intentionally
 omitted; opencode will fall back to its own defaults.
 """
+
 from __future__ import annotations
 
 import json

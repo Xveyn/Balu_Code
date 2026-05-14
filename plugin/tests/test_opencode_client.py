@@ -48,7 +48,11 @@ async def test_create_session_passes_title_when_provided():
             route = mock.post("/session").mock(
                 return_value=httpx.Response(
                     200,
-                    json={"id": "ses_xyz", "time": {"created": 0, "updated": 0}, "version": "1.14.50"},
+                    json={
+                        "id": "ses_xyz",
+                        "time": {"created": 0, "updated": 0},
+                        "version": "1.14.50",
+                    },
                 )
             )
             await client.create_session(title="my project chat")

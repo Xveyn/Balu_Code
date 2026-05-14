@@ -45,13 +45,13 @@ from .schemas import (
     ToolStat,
 )
 from .services.config_store import save_plugin_config
-from .services.opencode_runtime import OPENCODE_VERSION
 from .services.ollama_client import (
     OllamaClient,
     OllamaRateLimited,
     OllamaTimeoutError,
     OllamaUnreachable,
 )
+from .services.opencode_runtime import OPENCODE_VERSION
 from .services.project_store import (
     DuplicateProjectError,
     Project,
@@ -75,7 +75,8 @@ def _split_model(model_str: str) -> tuple[str, str]:
 
 
 def _session_bridge() -> SessionBridge:
-    from .deps import get_opencode_client as _goc, get_project_store as _gps
+    from .deps import get_opencode_client as _goc
+    from .deps import get_project_store as _gps
 
     return SessionBridge(
         store=_gps(),
@@ -305,6 +306,7 @@ def build_router() -> APIRouter:
     @router.get("/runtime/status", response_model=RuntimeStatusResponse, tags=["balu_code"])
     async def runtime_status():
         from .deps import get_opencode_client, get_opencode_handle
+
         handle = get_opencode_handle()
         client = get_opencode_client()
         healthy = await client.health()
