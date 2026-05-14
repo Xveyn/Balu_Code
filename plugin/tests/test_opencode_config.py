@@ -28,6 +28,13 @@ def test_url_with_trailing_slash_or_api_is_normalized():
     assert result["provider"]["ollama"]["options"]["baseURL"] == "http://x:1/api"
 
 
+def test_model_num_ctx_matches_plugin_context_window():
+    """Avoid silent 4096-token truncation by forwarding context_window as num_ctx."""
+    cfg = BaluCodePluginConfig(chat_model="x:1b", context_window=16384)
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    assert result["provider"]["ollama"]["models"]["x:1b"]["options"]["num_ctx"] == 16384
+
+
 def test_readonly_locks_down_edit_and_bash_when_write_denied():
     cfg = BaluCodePluginConfig()
     result = to_opencode_config(cfg, file_write_allowed=False)

@@ -39,6 +39,11 @@ def to_opencode_config(
     if not base_url.endswith("/api"):
         base_url = f"{base_url}/api"
 
+    # ollama-ai-provider-v2 forwards model.options to Ollama's /api/chat as
+    # the `options` field. Setting num_ctx avoids the silent 4096-token
+    # truncation that turns opencode's huge system prompt into nonsense.
+    model_options = {"num_ctx": cfg.context_window}
+
     out: dict = {
         "model": f"ollama/{cfg.chat_model}",
         "provider": {
@@ -47,7 +52,10 @@ def to_opencode_config(
                 "name": "Ollama (local)",
                 "options": {"baseURL": base_url},
                 "models": {
-                    cfg.chat_model: {"name": cfg.chat_model},
+                    cfg.chat_model: {
+                        "name": cfg.chat_model,
+                        "options": model_options,
+                    },
                 },
             },
         },
