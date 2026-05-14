@@ -32,3 +32,4 @@ env/
 
 # Plugin-local data
 ~/.local/share/balu-code/
+.aider*

@@ -39,10 +39,15 @@ def to_opencode_config(
     if not base_url.endswith("/api"):
         base_url = f"{base_url}/api"
 
-    # ollama-ai-provider-v2 forwards model.options to Ollama's /api/chat as
-    # the `options` field. Setting num_ctx avoids the silent 4096-token
-    # truncation that turns opencode's huge system prompt into nonsense.
-    model_options = {"num_ctx": cfg.context_window}
+    # ollama-ai-provider-v2 expects providerOptions to match its zod schema
+    # (https://github.com/opencomp-eu/ollama-ai-provider-v2 — ollamaProviderOptions):
+    #
+    #   { think?: bool, options?: { num_ctx?, temperature?, num_predict?, ... } }
+    #
+    # opencode flattens our model.options into providerOptions["ollama"], so we
+    # need a nested "options" key — otherwise num_ctx is silently dropped and
+    # Ollama applies its 4096-token default, truncating opencode's system prompt.
+    model_options = {"options": {"num_ctx": cfg.context_window}}
 
     out: dict = {
         "model": f"ollama/{cfg.chat_model}",
