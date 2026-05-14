@@ -171,3 +171,51 @@ async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
             assert env_dict.get("OPENCODE_CONFIG_DIR") == str(cfg_dir)
     finally:
         await rt.stop_server(handle)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: watchdog
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_watchdog_restarts_on_unhealthy():
+    health_results = iter([True, False, True, True])
+    restart_calls = []
+    async def fake_restart():
+        restart_calls.append(1)
+
+    wd = rt.Watchdog(
+        is_healthy=lambda: next(health_results),
+        restart=fake_restart,
+        poll_interval=0.02,
+        max_restarts=3,
+        window_seconds=5.0,
+    )
+    task = asyncio.create_task(wd.run())
+    await asyncio.sleep(0.15)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert len(restart_calls) >= 1
+
+
+@pytest.mark.asyncio
+async def test_watchdog_gives_up_after_max_restarts():
+    async def always_unhealthy():
+        return False
+    async def fake_restart():
+        pass
+
+    wd = rt.Watchdog(
+        is_healthy=always_unhealthy,
+        restart=fake_restart,
+        poll_interval=0.01,
+        max_restarts=2,
+        window_seconds=5.0,
+    )
+    with pytest.raises(RuntimeError, match="degraded state"):
+        await asyncio.wait_for(wd.run(), timeout=1.0)

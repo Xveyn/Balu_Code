@@ -13,7 +13,9 @@ import os
 import platform
 import signal
 import tarfile
-from dataclasses import dataclass
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -215,7 +217,6 @@ def _read_port_from_log(log_path: Path, timeout: float) -> int:
     opencode v1.14.50 prints a line containing 'http://<host>:<port>' on startup.
     """
     import re
-    import time
 
     deadline = time.monotonic() + timeout
     pattern = re.compile(r"http://[^:/\s]+:(\d+)")
@@ -229,12 +230,62 @@ def _read_port_from_log(log_path: Path, timeout: float) -> int:
     raise RuntimeError(f"could not detect opencode port from log {log_path}")
 
 
+# ---------------------------------------------------------------------------
+# Watchdog
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Watchdog:
+    """Poll health on interval, restart on failure, give up after max_restarts in window."""
+    is_healthy: Callable[[], bool] | Callable[[], Awaitable[bool]]
+    restart: Callable[[], Awaitable[None]]
+    poll_interval: float = 30.0
+    max_restarts: int = 3
+    window_seconds: float = 300.0
+    _restart_timestamps: list[float] = field(default_factory=list)
+
+    async def run(self) -> None:
+        """Loop: poll health, restart on failure, give up after max_restarts/window."""
+        while True:
+            try:
+                result = self.is_healthy()
+                if asyncio.iscoroutine(result):
+                    healthy = await result
+                else:
+                    healthy = bool(result)
+            except StopIteration:
+                # Avoid treating exhausted test iterators as unhealthy
+                healthy = True
+            except Exception:
+                healthy = False
+
+            if not healthy:
+                now = time.monotonic()
+                self._restart_timestamps = [
+                    t for t in self._restart_timestamps if now - t < self.window_seconds
+                ]
+                if len(self._restart_timestamps) >= self.max_restarts:
+                    raise RuntimeError(
+                        f"opencode runtime crashed {self.max_restarts} times in "
+                        f"{self.window_seconds}s — entering degraded state"
+                    )
+                self._restart_timestamps.append(now)
+                try:
+                    await self.restart()
+                except Exception:
+                    pass
+
+            await asyncio.sleep(self.poll_interval)
+
+
 __all__ = [
     "BINARY_CHECKSUMS",
     "ChecksumMismatchError",
     "OPENCODE_VERSION",
     "ServerHandle",
     "UnsupportedPlatformError",
+    "Watchdog",
     "binary_path",
     "detect_target_triple",
     "ensure_binary",
