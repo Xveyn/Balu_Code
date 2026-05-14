@@ -54,3 +54,42 @@ async def test_create_session_passes_title_when_provided():
             await client.create_session(title="my project chat")
             body = route.calls.last.request.read()
             assert b"my project chat" in body
+
+
+@pytest.mark.asyncio
+async def test_prompt_returns_assistant_message_payload():
+    async with OpencodeClient("http://127.0.0.1:4096") as client:
+        with respx.mock(base_url="http://127.0.0.1:4096") as mock:
+            route = mock.post("/session/ses_abc/message").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "info": {"id": "msg_xyz", "role": "assistant"},
+                        "parts": [{"id": "prt_1", "type": "text", "text": "hello"}],
+                    },
+                )
+            )
+            result = await client.prompt(
+                "ses_abc",
+                text="hi",
+                model_provider="ollama",
+                model_id="qwen2.5-coder:14b",
+            )
+            assert result["info"]["id"] == "msg_xyz"
+            assert len(result["parts"]) == 1
+            body = route.calls.last.request.read()
+            assert b"text" in body
+            assert b"hi" in body
+            assert b"qwen2.5-coder:14b" in body
+            assert b"ollama" in body
+
+
+@pytest.mark.asyncio
+async def test_session_abort_posts_to_abort_endpoint():
+    async with OpencodeClient("http://127.0.0.1:4096") as client:
+        with respx.mock(base_url="http://127.0.0.1:4096") as mock:
+            route = mock.post("/session/ses_abc/abort").mock(
+                return_value=httpx.Response(200, json=True)
+            )
+            await client.session_abort("ses_abc")
+            assert route.called
