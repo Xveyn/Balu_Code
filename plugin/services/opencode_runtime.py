@@ -254,9 +254,6 @@ class Watchdog:
                     healthy = await result
                 else:
                     healthy = bool(result)
-            except StopIteration:
-                # Avoid treating exhausted test iterators as unhealthy
-                healthy = True
             except Exception:
                 healthy = False
 
@@ -271,10 +268,7 @@ class Watchdog:
                         f"{self.window_seconds}s — entering degraded state"
                     )
                 self._restart_timestamps.append(now)
-                try:
-                    await self.restart()
-                except Exception:
-                    pass
+                await self.restart()
 
             await asyncio.sleep(self.poll_interval)
 

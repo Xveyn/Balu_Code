@@ -180,7 +180,7 @@ async def test_start_server_sets_opencode_config_dir_env(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_watchdog_restarts_on_unhealthy():
-    health_results = iter([True, False, True, True])
+    health_results = iter([True, False, True, True, True, True, True, True, True, True])
     restart_calls = []
     async def fake_restart():
         restart_calls.append(1)
