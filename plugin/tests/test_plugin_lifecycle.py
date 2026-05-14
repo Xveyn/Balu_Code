@@ -113,3 +113,13 @@ async def test_shutdown_clears_plugin_config(tmp_path, monkeypatch):
     await p.on_shutdown()
     with pytest.raises(RuntimeError):
         get_plugin_config()
+
+
+def test_opencode_password_singleton_roundtrip():
+    from plugin.deps import clear_opencode_password, get_opencode_password, set_opencode_password
+
+    set_opencode_password("hello-pw")
+    assert get_opencode_password() == "hello-pw"
+    clear_opencode_password()
+    with pytest.raises(LookupError):
+        get_opencode_password()

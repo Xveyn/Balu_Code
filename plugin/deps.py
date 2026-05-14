@@ -18,6 +18,7 @@ _audit_log: AuditLogger | None = None
 _data_dir: Path | None = None
 _opencode_handle: ServerHandle | None = None
 _opencode_client: OpencodeClient | None = None
+_opencode_password: str | None = None
 
 
 def set_singletons(
@@ -45,6 +46,7 @@ def clear_singletons() -> None:
     _data_dir = None
     _opencode_handle = None
     _opencode_client = None
+    clear_opencode_password()
 
 
 def update_plugin_config(config: BaluCodePluginConfig) -> None:
@@ -106,17 +108,36 @@ def get_opencode_client() -> OpencodeClient:
     return _opencode_client
 
 
+def set_opencode_password(password: str) -> None:
+    global _opencode_password
+    _opencode_password = password
+
+
+def get_opencode_password() -> str:
+    if _opencode_password is None:
+        raise LookupError("opencode password not initialised")
+    return _opencode_password
+
+
+def clear_opencode_password() -> None:
+    global _opencode_password
+    _opencode_password = None
+
+
 __all__ = [
     "clear_opencode",
+    "clear_opencode_password",
     "clear_singletons",
     "get_audit_log",
     "get_data_dir",
     "get_ollama_client",
     "get_opencode_client",
     "get_opencode_handle",
+    "get_opencode_password",
     "get_plugin_config",
     "get_project_store",
     "set_opencode",
+    "set_opencode_password",
     "set_singletons",
     "update_plugin_config",
 ]
