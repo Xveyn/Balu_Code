@@ -122,6 +122,12 @@ def set_opencode(handle: ServerHandle, client: OpencodeClient) -> None:
     _opencode_client = client
 
 
+def clear_opencode() -> None:
+    global _opencode_handle, _opencode_client
+    _opencode_handle = None
+    _opencode_client = None
+
+
 def get_opencode_handle() -> ServerHandle:
     if _opencode_handle is None:
         raise RuntimeError("opencode runtime not initialized")
@@ -135,6 +141,7 @@ def get_opencode_client() -> OpencodeClient:
 
 
 __all__ = [
+    "clear_opencode",
     "clear_singletons",
     "get_audit_log",
     "get_data_dir",

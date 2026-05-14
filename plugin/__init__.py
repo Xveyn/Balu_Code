@@ -17,7 +17,7 @@ from fastapi import APIRouter
 
 from .config import BaluCodePluginConfig
 from .data_dir import resolve_data_dir
-from .deps import clear_singletons, set_singletons
+from .deps import clear_opencode, clear_singletons, set_singletons
 from .routes import build_router
 from .services.audit import AuditLogger
 from .services.index_jobs import IndexJobTracker
@@ -40,6 +40,8 @@ class BaluCodePlugin(PluginBase):
         self._rag_registry: RagRegistry | None = None
         self._index_job_tracker: IndexJobTracker | None = None
         self._tool_registry: ToolRegistry | None = None
+        self._opencode_handle = None
+        self._opencode_client = None
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -111,7 +113,47 @@ class BaluCodePlugin(PluginBase):
             data_dir,
         )
 
+        # Boot the embedded opencode runtime.
+        # CWD defaults to data_dir; routes may restart opencode in a project's
+        # root_path when a different project becomes active (single-server
+        # single-current-project model — see spec section "Plan deviations").
+        from .services.opencode_runtime import ensure_binary, start_server
+        from .services.opencode_client import OpencodeClient
+        from .services.opencode_config import write_opencode_config
+        from .deps import set_opencode
+
+        # Phase A: treat as allowed; Phase B wires the real BaluHost permission check.
+        file_write_allowed = True
+
+        opencode_binary = await ensure_binary(data_dir)
+        opencode_cfg_path = write_opencode_config(
+            data_dir, self._config, file_write_allowed=file_write_allowed
+        )
+        opencode_log_path = data_dir / "opencode.log"
+        handle = await start_server(
+            binary=opencode_binary,
+            config_dir=opencode_cfg_path.parent,  # OPENCODE_CONFIG_DIR
+            log_path=opencode_log_path,
+            port=self._config.opencode_port,
+            ready_timeout=15.0,
+        )
+        opencode_client = OpencodeClient(f"http://127.0.0.1:{handle.port}")
+        set_opencode(handle, opencode_client)
+        self._opencode_handle = handle
+        self._opencode_client = opencode_client
+
     async def on_shutdown(self) -> None:
+        # Stop the embedded opencode runtime first
+        from .services.opencode_runtime import stop_server
+
+        if self._opencode_client is not None:
+            await self._opencode_client.close()
+        if self._opencode_handle is not None:
+            await stop_server(self._opencode_handle)
+        clear_opencode()
+        self._opencode_handle = None
+        self._opencode_client = None
+
         if (
             self._store is None
             and self._ollama is None
