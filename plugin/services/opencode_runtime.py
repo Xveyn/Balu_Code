@@ -7,18 +7,20 @@ integration smoke test, ship.
 from __future__ import annotations
 
 import hashlib
+import io
 import platform
+import tarfile
 from pathlib import Path
 
 import httpx
 
-OPENCODE_VERSION = "0.6.0"  # bump per release; verify checksums when bumping
+OPENCODE_VERSION = "1.14.50"  # bump per release; verify checksums when bumping
 
-# sha256 of the standalone binaries from upstream GitHub releases.
-# Populated in Task 4 with real values. Placeholders are intentional config
-# values, not unfinished plan items — they get filled at release time.
+# sha256 of the *extracted* binaries from upstream GitHub releases.
+# Upstream project: https://github.com/sst/opencode
+# Checksum is computed against the binary AFTER extraction from the archive.
 BINARY_CHECKSUMS: dict[str, str] = {
-    "linux-x86_64": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "linux-x86_64": "sha256:2c4abf29d5765f535f10ffec748aa38939d5441750abbdb5001a4307d33349ae",
 }
 
 
@@ -43,8 +45,13 @@ def detect_target_triple() -> str:
     raise UnsupportedPlatformError(f"unsupported platform: {system}/{machine}")
 
 
+# Map our internal triple names to upstream asset filename suffixes
+_UPSTREAM_TRIPLE: dict[str, str] = {
+    "linux-x86_64": "linux-x64",
+}
+
 _DOWNLOAD_URL_TEMPLATE = (
-    "https://github.com/sst/opencode/releases/download/v{version}/opencode-{triple}.tar.gz"
+    "https://github.com/sst/opencode/releases/download/v{version}/opencode-{asset_triple}.tar.gz"
 )
 
 
@@ -66,13 +73,27 @@ async def ensure_binary(
         return target
 
     target.parent.mkdir(parents=True, exist_ok=True)
+    triple = detect_target_triple()
     url = _DOWNLOAD_URL_TEMPLATE.format(
-        version=OPENCODE_VERSION, triple=detect_target_triple()
+        version=OPENCODE_VERSION, asset_triple=_UPSTREAM_TRIPLE[triple]
     )
-    async with httpx.AsyncClient(transport=transport, timeout=120.0) as client:
+    async with httpx.AsyncClient(transport=transport, timeout=120.0, follow_redirects=True) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         data = resp.content
+
+    # Extract the opencode binary from the tarball
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        members = [
+            m for m in tar.getmembers()
+            if m.isfile() and m.name.rstrip("/").endswith("opencode")
+        ]
+        if not members:
+            raise RuntimeError("no opencode binary found inside tarball")
+        f = tar.extractfile(members[0])
+        if f is None:
+            raise RuntimeError("could not extract opencode binary from tarball")
+        data = f.read()
 
     actual = "sha256:" + hashlib.sha256(data).hexdigest()
     if actual != expected_checksum:

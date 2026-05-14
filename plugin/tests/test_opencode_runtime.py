@@ -39,19 +39,30 @@ def test_binary_path_under_data_dir(tmp_path):
 @pytest.mark.asyncio
 async def test_ensure_binary_downloads_when_missing(tmp_path, monkeypatch):
     import hashlib as _h
-    fake_bytes = b"#!/bin/sh\necho fake opencode\n"
-    fake_checksum = "sha256:" + _h.sha256(fake_bytes).hexdigest()
+    import io
+    import tarfile
+
+    fake_binary = b"#!/bin/sh\necho fake opencode\n"
+    fake_checksum = "sha256:" + _h.sha256(fake_binary).hexdigest()
     monkeypatch.setitem(rt.BINARY_CHECKSUMS, "linux-x86_64", fake_checksum)
+
+    # Build an in-memory .tar.gz containing a file named "opencode"
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        info = tarfile.TarInfo(name="opencode")
+        info.size = len(fake_binary)
+        tar.addfile(info, io.BytesIO(fake_binary))
+    tarball_bytes = buf.getvalue()
 
     async def mock_handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
         assert "opencode" in str(request.url)
-        return httpx.Response(200, content=fake_bytes)
+        return httpx.Response(200, content=tarball_bytes)
 
     transport = httpx.MockTransport(mock_handler)
     bin_path = await rt.ensure_binary(tmp_path, transport=transport)
     assert bin_path.exists()
-    assert bin_path.read_bytes() == fake_bytes
+    assert bin_path.read_bytes() == fake_binary
     assert bin_path.stat().st_mode & 0o111  # executable bit set
 
 
