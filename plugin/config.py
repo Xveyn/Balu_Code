@@ -29,5 +29,8 @@ class BaluCodePluginConfig(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     poll_interval_seconds: int = Field(default=10, ge=3, le=300)
 
+    # Phase A opencode integration
+    opencode_port: int = Field(default=4096, ge=0, le=65535)
+
 
 __all__ = ["BaluCodePluginConfig"]
