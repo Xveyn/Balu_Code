@@ -38,6 +38,7 @@ from .deps import (
 )
 from .schemas import (
     ApprovalSummary,
+    ChatV2Request,
     ConfigUpdateRequest,
     DayStat,
     GpuInfo,
@@ -81,11 +82,30 @@ from .services.project_store import (
 from .services.rag_index import RagIndexUnavailable
 from .services.rag_registry import RagRegistry
 from .services.repo_map import ProjectRootNotAccessible, RepoMap
+from .services.session_bridge import SessionBridge
 from .services.system import get_gpu_info
 from .services.tools import ToolRegistry
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
+
+
+def _split_model(model_str: str) -> tuple[str, str]:
+    """Split "provider/modelID" into (provider, modelID).
+    If no slash, defaults provider to 'ollama'."""
+    if "/" in model_str:
+        provider, _, mid = model_str.partition("/")
+        return provider, mid
+    return "ollama", model_str
+
+
+def _session_bridge() -> SessionBridge:
+    from .deps import get_opencode_client as _goc, get_project_store as _gps
+
+    return SessionBridge(
+        store=_gps(),
+        create_session=_goc().create_session,
+    )
 
 
 async def _ws_auth(websocket: WebSocket) -> UserPublic:
@@ -541,6 +561,64 @@ def build_router() -> APIRouter:
             if _turn_task is not None and not _turn_task.done():
                 _turn_task.cancel()
             return
+
+    # ----- /chat/v2: opencode-backed chat (sync, JSON) -----
+    @router.post("/chat/v2/{project_id}", tags=["balu_code"])
+    async def chat_v2(project_id: int, body: ChatV2Request):
+        from .deps import get_audit_log, get_opencode_client, get_plugin_config
+
+        client = get_opencode_client()
+        audit = get_audit_log()
+        bridge = _session_bridge()
+        session_id = await bridge.get_or_create(project_id)
+
+        # Extract last user message text
+        last_user = next(
+            (m for m in reversed(body.messages) if m.role == "user"),
+            None,
+        )
+        if last_user is None:
+            raise HTTPException(status_code=400, detail="messages must include a user message")
+
+        model_str = body.model or f"ollama/{get_plugin_config().chat_model}"
+        provider, model_id = _split_model(model_str)
+
+        result = await client.prompt(
+            session_id,
+            text=last_user.content,
+            model_provider=provider,
+            model_id=model_id,
+        )
+
+        # Audit any tool parts
+        for part in result.get("parts", []):
+            if part.get("type") == "tool" and part.get("tool"):
+                state = part.get("state") or {}
+                tool_status = state.get("status", "completed")
+                await audit.record_tool_call(
+                    tool=part.get("tool", "unknown"),
+                    user="system",  # Phase B: thread real user identity
+                    turn_id=session_id,
+                    tool_call_id=part.get("callID", part.get("id", "")),
+                    args=part.get("input", {}),
+                    status="ok" if tool_status == "completed" else "error",
+                    bytes_out=0,
+                    error=None if tool_status == "completed" else state.get("error"),
+                    approved=True,
+                    auto_approved=True,
+                )
+
+        return result
+
+    @router.post("/chat/v2/{project_id}/cancel", tags=["balu_code"])
+    async def chat_v2_cancel(project_id: int):
+        from .deps import get_opencode_client
+
+        client = get_opencode_client()
+        bridge = _session_bridge()
+        session_id = await bridge.get_or_create(project_id)
+        await client.session_abort(session_id)
+        return {"status": "aborted"}
 
     return router
 

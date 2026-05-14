@@ -151,8 +151,20 @@ class StatsResponse(BaseModel):
     approval_summary: ApprovalSummary
 
 
+class ChatV2Message(BaseModel):
+    role: str  # "user" | "assistant" | "system"
+    content: str
+
+
+class ChatV2Request(BaseModel):
+    messages: list[ChatV2Message]
+    model: str | None = None  # "provider/modelID"; falls back to plugin default
+
+
 __all__ = [
     "ApprovalSummary",
+    "ChatV2Message",
+    "ChatV2Request",
     "ConfigUpdateRequest",
     "DayStat",
     "GpuInfo",
