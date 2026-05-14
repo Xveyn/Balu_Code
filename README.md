@@ -1,16 +1,20 @@
 # Balu Code
 
-Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Runs against a local Ollama instance, controlled via a terminal CLI or the BaluHost web UI.
+Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Powered by [opencode](https://github.com/sst/opencode), controlled via a terminal CLI or the BaluHost web UI.
 
-**Current version:** v0.1.0
+**Current version:** 0.2.0
+
+## Architecture
+
+Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as the coding agent runtime. The plugin manages BaluHost integration (auth, audit, config UI, project storage) while opencode owns the agent loop, tools, prompts, and LLM calls. The opencode binary is downloaded on first plugin start (~50 MB) and verified against a pinned sha256.
 
 ## Features
 
-**Agent**
+**Agent** (via opencode)
 - Streaming chat REPL with agentic tool loop
 - Per-tool approval gate: `--yolo` / `.balucode.yaml` / stored permissions / interactive prompt
-- Tools: `read_file`, `glob`, `grep`, `repo_map`, `write_file`, `apply_patch`, `run_bash`, `web_fetch`
-- Tree-sitter repo map (Python) + semantic RAG via `nomic-embed-text`
+- Tools: full opencode tool suite (code read/write, bash, web fetch, etc.)
+- Semantic repo understanding + RAG
 - Audit log written to BaluHost `audit_logs` table
 
 **Plugin (web UI)**
@@ -34,30 +38,27 @@ Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Runs
 |-----------|---------|
 | BaluHost | ≥ 1.29.0 |
 | Ollama | 0.3.x (on `127.0.0.1:11434`) |
-| GPU VRAM | 16 GB (for `qwen2.5-coder:14b-instruct-q4_K_M` at q4) |
+| GPU VRAM | Depends on opencode config + selected LLM model |
 | GPU driver | ROCm ≥ 6.1 or CUDA ≥ 12.1 |
 
 **Reference hardware:** AMD RX 7900 XT (20 GB GDDR6, ROCm 6.2).
 
+**Note:** The opencode binary is self-contained; no separate system Bun or Node.js installation required.
+
 ## Quick Start
 
 ```bash
-# 1. Pull the Ollama models
-ollama pull qwen2.5-coder:14b-instruct-q4_K_M
-ollama pull nomic-embed-text
-
-# 2. Install the plugin
-# Download balu_code-0.1.0.bhplugin from GitHub Releases,
+# 1. Install the plugin
+# Download balu_code-0.2.0.bhplugin from GitHub Releases,
 # then upload via BaluHost → Plugins → Install plugin.
 
-# 3. Install the CLI
+# 2. Install the CLI and authenticate
 pip install balu-code-cli
 balu-code auth login --server https://<host> --key <key>
 
-# 4. Register a project and start chatting
+# 3. Register a project and start chatting
 cd ~/my-project
 balu-code init
-balu-code index
 balu-code chat
 ```
 
