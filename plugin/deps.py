@@ -115,7 +115,7 @@ def set_opencode_password(password: str) -> None:
 
 def get_opencode_password() -> str:
     if _opencode_password is None:
-        raise LookupError("opencode password not initialised")
+        raise RuntimeError("opencode password not initialized")
     return _opencode_password
 
 

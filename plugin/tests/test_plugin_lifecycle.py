@@ -121,5 +121,5 @@ def test_opencode_password_singleton_roundtrip():
     set_opencode_password("hello-pw")
     assert get_opencode_password() == "hello-pw"
     clear_opencode_password()
-    with pytest.raises(LookupError):
+    with pytest.raises(RuntimeError):
         get_opencode_password()
