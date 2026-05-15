@@ -59,9 +59,25 @@ Revoke the old key in the BaluHost web UI to invalidate it server-side.
 
 ## What the server admin needs to do once
 
-Carve `/api/plugins/balu_code/ollama/` out of nginx Basic Auth — drop the
-snippet from [`docs/remote-client/nginx.example.conf`](remote-client/nginx.example.conf)
-into the BaluHost `server { ... }` block, then `sudo nginx -t && sudo systemctl reload nginx`.
+Add a dedicated `location` block for `/api/plugins/balu_code/ollama/` to
+nginx so streaming chat completions aren't truncated by the default
+300-second timeout the rest of `/api/` uses. The snippet at
+[`docs/remote-client/nginx.example.conf`](remote-client/nginx.example.conf)
+also carries `auth_basic off` for setups where the API path is wrapped in
+nginx Basic Auth — harmless no-op on installs that don't have it.
+
+The repo ships an idempotent installer:
+
+```bash
+sudo bash scripts/install-nginx-snippet-server.sh
+```
+
+It locates `/etc/nginx/sites-available/baluhost`, inserts the location
+block right before the server block's closing brace if it isn't already
+present, runs `nginx -t`, and reloads nginx. Safe to re-run.
+
+If you maintain nginx by hand, just paste the snippet inside your BaluHost
+`server { listen 443 ... }` block and `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Troubleshooting
 
