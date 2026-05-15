@@ -105,6 +105,7 @@ fi
 
 # --- 3. Config ---
 mkdir -p "${CONFIG_DIR}"
+chmod 0700 "${CONFIG_DIR}"
 api_key_value="$(cat "${KEY_FILE}")"
 base_url="${BASE_URL:-$(prompt "BaluHost base URL (without trailing slash)" "https://baluhost.example")}"
 model="${MODEL:-$(prompt "Default model" "qwen2.5-coder:14b")}"
@@ -115,9 +116,14 @@ full_base="${base_url%/}/api/plugins/balu_code/ollama/api"
 # Use python rather than sed to keep escaping sane (api keys contain '/' and '+').
 python3 - "${TEMPLATE_PATH}" "${CONFIG_FILE}" \
     "${full_base}" "${api_key_value}" "${model}" "${num_ctx}" <<'PY'
-import sys, pathlib
+import sys, json, pathlib
 tmpl_path, out_path, base_url, api_key, model, num_ctx = sys.argv[1:]
 tmpl = pathlib.Path(tmpl_path).read_text()
+# JSON-escape (without surrounding quotes) so '"', '\', or control chars
+# in any substituted value can't produce invalid JSON.
+base_url = json.dumps(base_url)[1:-1]
+api_key = json.dumps(api_key)[1:-1]
+model = json.dumps(model)[1:-1]
 out = (tmpl
        .replace("__BASE_URL__", base_url)
        .replace("__API_KEY__", api_key)
