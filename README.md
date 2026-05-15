@@ -94,6 +94,7 @@ See [`docs/config.md`](docs/config.md) for the full configuration reference.
 - [`docs/install.md`](docs/install.md) — installation and Ollama setup
 - [`docs/cli.md`](docs/cli.md) — CLI command reference
 - [`docs/config.md`](docs/config.md) — configuration reference
+- [`docs/remote-client.md`](docs/remote-client.md) — run opencode on a client laptop against the BaluHost server
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — release history
 
 ## License

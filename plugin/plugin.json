@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "balu_code",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "display_name": "Balu Code",
   "description": "Self-hosted coding agent backed by Ollama. Provides a terminal CLI and a web settings panel.",
   "author": "Xveyn",

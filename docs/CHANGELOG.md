@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.1 — 2026-05-15
+
+### Added
+- Remote-client workflow: run opencode locally on a laptop, proxy LLM calls
+  to the BaluHost-hosted Ollama via a new authenticated route
+  `GET/POST /api/plugins/balu_code/ollama/{path}`. Auth uses BaluHost API
+  keys (`balu_…` Bearer tokens) — same dependency as the rest of the plugin,
+  no new auth surface.
+- `scripts/bootstrap-remote-client.sh` — downloads pinned opencode binary,
+  verifies checksum, prompts for API key, renders client config.
+- `docs/remote-client.md` — install + ops guide.
+
+### Ops
+- New nginx `location` block required to carve `/api/plugins/balu_code/ollama/`
+  out of Basic Auth. Snippet at `docs/remote-client/nginx.example.conf`.
+
 ## 0.2.0 — 2026-05-14
 
 ### Changed
