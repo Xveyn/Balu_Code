@@ -45,4 +45,46 @@ async def proxy_request(
     transport: httpx.AsyncBaseTransport | None = None,
     timeout: float = 600.0,
 ) -> StreamingResponse:
-    raise NotImplementedError
+    target = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+    forward_headers = {
+        k: v for k, v in request.headers.items() if k.lower() not in _HEADERS_TO_DROP
+    }
+    body = await request.body()
+
+    client = httpx.AsyncClient(transport=transport, timeout=timeout)
+    upstream_req = client.build_request(
+        method=request.method,
+        url=target,
+        headers=forward_headers,
+        content=body,
+    )
+    upstream = await client.send(upstream_req, stream=True)
+
+    response_headers = {
+        k: v for k, v in upstream.headers.items() if k.lower() not in _HEADERS_TO_DROP
+    }
+
+    async def body_iter():
+        try:
+            if upstream.is_stream_consumed:
+                # MockTransport (and any transport that buffers) hands us a
+                # response whose body is already loaded — aiter_raw would
+                # raise StreamConsumed. Yield the buffered bytes instead.
+                if upstream.content:
+                    yield upstream.content
+            else:
+                async for chunk in upstream.aiter_raw():
+                    yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        body_iter(),
+        status_code=upstream.status_code,
+        headers=response_headers,
+    )
+
+
+__all__ = ["proxy_request"]
