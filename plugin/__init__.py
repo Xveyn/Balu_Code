@@ -98,10 +98,11 @@ class BaluCodePlugin(PluginBase):
         # CWD defaults to data_dir; routes may restart opencode in a project's
         # root_path when a different project becomes active (single-server
         # single-current-project model — see spec section "Plan deviations").
-        from .deps import set_opencode
+        from .deps import set_opencode, set_opencode_password
         from .services.opencode_client import OpencodeClient
         from .services.opencode_config import write_opencode_config
         from .services.opencode_runtime import ensure_binary, start_or_attach_server
+        from .services.runtime_password import load_or_create_password
 
         # Phase A: treat as allowed; Phase B wires the real BaluHost permission check.
         file_write_allowed = True
@@ -111,6 +112,8 @@ class BaluCodePlugin(PluginBase):
             data_dir, self._config, file_write_allowed=file_write_allowed
         )
         opencode_log_path = data_dir / "opencode.log"
+        opencode_password = load_or_create_password(data_dir)
+        set_opencode_password(opencode_password)
         handle = await start_or_attach_server(
             binary=opencode_binary,
             config_dir=opencode_cfg_path.parent,  # OPENCODE_CONFIG_DIR
@@ -118,8 +121,11 @@ class BaluCodePlugin(PluginBase):
             lock_path=data_dir / "runtime.lock",
             port=self._config.opencode_port,
             ready_timeout=20.0,
+            password=opencode_password,
         )
-        opencode_client = OpencodeClient(f"http://127.0.0.1:{handle.port}")
+        opencode_client = OpencodeClient(
+            f"http://127.0.0.1:{handle.port}", password=opencode_password
+        )
         set_opencode(handle, opencode_client)
         self._opencode_handle = handle
         self._opencode_client = opencode_client

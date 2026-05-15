@@ -17,10 +17,19 @@ class OpencodeClient:
         self,
         base_url: str,
         *,
+        password: str | None = None,
         timeout: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
+        auth: httpx.Auth | None = (
+            httpx.BasicAuth("opencode", password) if password else None
+        )
+        self._client = httpx.AsyncClient(
+            base_url=base_url,
+            timeout=timeout,
+            transport=transport,
+            auth=auth,
+        )
 
     async def __aenter__(self) -> OpencodeClient:
         return self

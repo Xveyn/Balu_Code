@@ -167,29 +167,49 @@ git branch -d feat/opencode-runtime
 
 All three are tracked as v0.3.0 candidates.
 
-## TODO: opencode server password
+## opencode server password (done in 0.3.0)
 
 opencode logs `Warning: OPENCODE_SERVER_PASSWORD is not set; server is
-unsecured.` on every start. While the server only binds to `127.0.0.1`
-in our setup, two situations escalate this from cosmetic to a real
-security issue:
+unsecured.` when started without a password. The plugin now sets one:
 
-1. **Web UI exposure**: opencode's HTTP server already ships a full
-   browser UI at `GET http://127.0.0.1:4096/`. Anyone with shell access
-   to the host (any local user, any process) can drive the agent —
-   read files, run shell commands under the plugin's uid — without auth.
-2. **LAN exposure**: the moment the server binds to `0.0.0.0` (via
-   `--hostname 0.0.0.0` or `--mdns`), every device on the LAN can
-   reach the unauthenticated agent.
+- On first start, `plugin/services/runtime_password.py` generates a
+  32-byte URL-safe value and persists it as
+  `<data_dir>/runtime.password` (mode 0600). Subsequent starts reload
+  the same value.
+- `plugin/services/opencode_runtime.py` injects the password as
+  `OPENCODE_SERVER_PASSWORD` into the spawned process env, and every
+  internal health probe sends `Authorization: Basic
+  base64("opencode:<password>")`.
+- `plugin/services/opencode_client.py` does the same for `/session`
+  and `/session/{id}/message` calls.
+- Authenticated BaluHost API consumers can fetch the password from
+  `GET /api/plugins/balu_code/runtime/credentials` (response:
+  `{"username": "opencode", "password": "..."}`). The endpoint requires
+  a valid BaluHost JWT (`Depends(get_current_user)`). This is how the
+  standalone CLI / browser usage works:
 
-Fix (v0.3.0 candidate):
-- Generate a random password at first plugin start, store it under
-  `~/.local/share/balu-code/runtime.password` (mode 0600).
-- Pass it as the `OPENCODE_SERVER_PASSWORD` env var when spawning
-  opencode (see `start_or_attach_server` in `plugin/services/opencode_runtime.py`).
-- Forward the same value in the `Authorization: Bearer <password>`
-  header from `OpencodeClient` (so the existing `/chat/v2` path still
-  works).
-- Optional: surface the password in the BaluHost Runtime tab so admins
-  can copy it for the standalone `opencode` CLI / browser usage
-  (`OPENCODE_SERVER_PASSWORD=... opencode attach http://127.0.0.1:4096`).
+      OPENCODE_SERVER_PASSWORD=$(curl -s ... /credentials | jq -r .password) \
+        opencode attach http://127.0.0.1:4096
+
+### Upstream auth contract (verified on v1.14.50)
+
+- `WWW-Authenticate: Basic realm="Secure Area"` on every 401 response.
+- Hardcoded username `opencode` — any other user returns 401 even
+  with the right password.
+- `/global/health` is **also** behind the auth wall; an unauthenticated
+  probe returns 401, which is treated as "not healthy" by the runtime
+  watchdog.
+
+### Migration: existing orphan server
+
+A baluhost-backend that was running before this change spawned a child
+opencode process **without** `OPENCODE_SERVER_PASSWORD`. After
+upgrading, restart the backend so the new code path takes over:
+
+```bash
+sudo pkill -f 'opencode-linux-x86_64 serve'
+sudo systemctl restart baluhost-backend
+```
+
+The next plugin boot spawns a fresh opencode process with the persisted
+password.

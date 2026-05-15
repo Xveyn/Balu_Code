@@ -21,6 +21,7 @@ from .deps import (
     get_audit_log,
     get_data_dir,
     get_ollama_client,
+    get_opencode_password,
     get_plugin_config,
     get_project_store,
     update_plugin_config,
@@ -39,6 +40,7 @@ from .schemas import (
     OllamaSystemInfo,
     ProjectCreate,
     ProjectsResponse,
+    RuntimeCredentialsResponse,
     RuntimeStatusResponse,
     StatsResponse,
     SystemResponse,
@@ -323,6 +325,21 @@ def build_router() -> APIRouter:
             status_code=501,
             detail="manual restart not implemented; rely on watchdog",
         )
+
+    @router.get(
+        "/runtime/credentials",
+        response_model=RuntimeCredentialsResponse,
+        tags=["balu_code"],
+    )
+    def runtime_credentials(_user: UserPublic = Depends(get_current_user)) -> RuntimeCredentialsResponse:
+        try:
+            password = get_opencode_password()
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="opencode runtime not initialized",
+            ) from exc
+        return RuntimeCredentialsResponse(username="opencode", password=password)
 
     return router
 

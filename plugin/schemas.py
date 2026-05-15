@@ -132,6 +132,18 @@ class RuntimeStatusResponse(BaseModel):
     binary_version: str
 
 
+class RuntimeCredentialsResponse(BaseModel):
+    """Basic-Auth credentials for the embedded OpenCode server.
+
+    Returned for callers who need to attach to the local server with the
+    standalone ``opencode`` CLI or a browser:
+        OPENCODE_SERVER_PASSWORD=<password> opencode attach http://127.0.0.1:<port>
+    """
+
+    username: str
+    password: str
+
+
 __all__ = [
     "ApprovalSummary",
     "ChatV2Message",
@@ -147,6 +159,7 @@ __all__ = [
     "OllamaSystemInfo",
     "ProjectCreate",
     "ProjectsResponse",
+    "RuntimeCredentialsResponse",
     "RuntimeStatusResponse",
     "StatsResponse",
     "SystemResponse",
