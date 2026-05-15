@@ -2,7 +2,7 @@
 
 Self-hosted coding agent for [BaluHost](https://github.com/Xveyn/Baluhost). Powered by [opencode](https://github.com/sst/opencode), controlled via the BaluHost web UI or the embedded opencode CLI.
 
-**Current version:** 0.2.0
+**Current version:** 0.2.1
 
 ## Architecture
 
@@ -46,7 +46,7 @@ Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as
 
 ```bash
 # 1. Install the plugin
-# Download balu_code-0.2.0.bhplugin from GitHub Releases,
+# Download balu_code-0.2.1.bhplugin from GitHub Releases,
 # then upload via BaluHost → Plugins → Install plugin.
 
 # 2. Use the web UI to configure models and create projects.
