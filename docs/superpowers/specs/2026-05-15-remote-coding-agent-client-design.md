@@ -217,11 +217,17 @@ Known limitations, accepted for v1:
   visible in changelogs (Sven's call during planning).
 - Nginx change is a single `location` block addition; revertible.
 
-## Open questions for planning
+## Decisions locked in during spec review
 
-- Exact form of `Authorization: Bearer $BALU_API_KEY` env expansion — verify
-  opencode honors `$VAR` in JSON config string values; if not, plan a tiny
-  shell wrapper that template-renders `opencode.json` at startup.
-- Whether to ship a `scripts/bootstrap-remote-client.sh` (downloads opencode
-  with checksum, writes config, prompts for API key) or keep the install as
-  pure documentation. Bootstrap script is the more Sven-pragmatic choice.
+- **`$BALU_API_KEY` env expansion is the default.** The implementation plan
+  will first verify opencode honors `$VAR` substitution in JSON config string
+  values (a 30-second smoke test against the local opencode binary). If it
+  doesn't, fall back to a one-line shell wrapper that runs
+  `envsubst < opencode.json.tmpl > opencode.json` before launching — not a
+  spec change, just a planning contingency.
+- **Ship `scripts/bootstrap-remote-client.sh`.** Downloads opencode binary,
+  verifies checksum (reuses `BINARY_CHECKSUMS` from `opencode_runtime.py`),
+  writes `~/.config/opencode/opencode.json` from a template, prompts for the
+  API key once, appends `export BALU_API_KEY=…` to the user's shell rc with
+  consent. Idempotent: re-running on an already-bootstrapped host re-verifies
+  the binary and updates the config without clobbering the key.
