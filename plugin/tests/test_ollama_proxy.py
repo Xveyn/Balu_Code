@@ -66,7 +66,7 @@ def test_post_request_forwards_body_bytes():
     assert seen["content_type"] == "application/json"
 
 
-def test_streaming_response_chunks_pass_through_in_order():
+def test_streaming_response_body_passes_through():
     chunks = [b'{"chunk":1}\n', b'{"chunk":2}\n', b'{"chunk":3}\n']
 
     def handler(request: httpx.Request) -> httpx.Response:
