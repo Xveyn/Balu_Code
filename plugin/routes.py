@@ -14,7 +14,7 @@ from pathlib import Path
 
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from .config import BaluCodePluginConfig
 from .deps import (
@@ -53,6 +53,7 @@ from .services.ollama_client import (
     OllamaTimeoutError,
     OllamaUnreachable,
 )
+from .services.ollama_proxy import proxy_request
 from .services.opencode_runtime import OPENCODE_VERSION
 from .services.project_store import (
     DuplicateProjectError,
@@ -340,6 +341,19 @@ def build_router() -> APIRouter:
                 detail="opencode runtime not initialized",
             ) from exc
         return RuntimeCredentialsResponse(username="opencode", password=password)
+
+    @router.api_route(
+        "/ollama/{path:path}",
+        methods=["GET", "POST"],
+        tags=["balu_code"],
+    )
+    async def ollama_proxy_route(
+        path: str,
+        request: Request,
+        _user: UserPublic = Depends(get_current_user),
+        config: BaluCodePluginConfig = Depends(get_plugin_config),
+    ):
+        return await proxy_request(request, path, base_url=config.ollama_base_url)
 
     return router
 
