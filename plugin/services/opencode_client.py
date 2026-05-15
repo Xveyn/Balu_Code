@@ -21,9 +21,7 @@ class OpencodeClient:
         timeout: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        auth: httpx.Auth | None = (
-            httpx.BasicAuth("opencode", password) if password else None
-        )
+        auth: httpx.Auth | None = httpx.BasicAuth("opencode", password) if password else None
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=timeout,

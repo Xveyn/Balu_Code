@@ -332,7 +332,9 @@ def build_router() -> APIRouter:
         response_model=RuntimeCredentialsResponse,
         tags=["balu_code"],
     )
-    def runtime_credentials(_user: UserPublic = Depends(get_current_user)) -> RuntimeCredentialsResponse:
+    def runtime_credentials(
+        _user: UserPublic = Depends(get_current_user),
+    ) -> RuntimeCredentialsResponse:
         try:
             password = get_opencode_password()
         except RuntimeError as exc:

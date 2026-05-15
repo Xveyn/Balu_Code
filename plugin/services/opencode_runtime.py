@@ -188,7 +188,9 @@ async def start_server(
     )
 
     actual_port = port if port > 0 else _read_port_from_log(log_path, timeout=5.0)
-    healthy = await _wait_for_health(hostname, actual_port, timeout=ready_timeout, password=password)
+    healthy = await _wait_for_health(
+        hostname, actual_port, timeout=ready_timeout, password=password
+    )
     if not healthy:
         proc.terminate()
         try:
@@ -258,7 +260,9 @@ def _read_port_from_log(log_path: Path, timeout: float) -> int:
 # ---------------------------------------------------------------------------
 
 
-async def _probe_health(host: str, port: int, *, timeout: float, password: str | None = None) -> bool:
+async def _probe_health(
+    host: str, port: int, *, timeout: float, password: str | None = None
+) -> bool:
     """One-shot health check. Returns True on 200, False otherwise (no waiting)."""
     auth = httpx.BasicAuth("opencode", password) if password else None
     async with httpx.AsyncClient(timeout=timeout, auth=auth) as client:

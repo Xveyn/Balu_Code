@@ -105,9 +105,7 @@ async def test_session_abort_posts_to_abort_endpoint():
 async def test_health_sends_basic_auth_header_when_password_set():
     async with OpencodeClient("http://127.0.0.1:4096", password="secret-pw") as client:
         with respx.mock(base_url="http://127.0.0.1:4096") as mock:
-            route = mock.get("/global/health").mock(
-                return_value=httpx.Response(200, json={})
-            )
+            route = mock.get("/global/health").mock(return_value=httpx.Response(200, json={}))
             await client.health()
             expected = b"Basic " + base64.b64encode(b"opencode:secret-pw")
             assert route.calls.last.request.headers["authorization"].encode() == expected
@@ -117,13 +115,9 @@ async def test_health_sends_basic_auth_header_when_password_set():
 async def test_no_authorization_header_when_password_omitted():
     async with OpencodeClient("http://127.0.0.1:4096") as client:
         with respx.mock(base_url="http://127.0.0.1:4096") as mock:
-            route = mock.get("/global/health").mock(
-                return_value=httpx.Response(200, json={})
-            )
+            route = mock.get("/global/health").mock(return_value=httpx.Response(200, json={}))
             await client.health()
-            assert "authorization" not in (
-                k.lower() for k in route.calls.last.request.headers
-            )
+            assert "authorization" not in (k.lower() for k in route.calls.last.request.headers)
 
 
 @pytest.mark.asyncio
