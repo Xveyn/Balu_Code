@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -45,3 +44,52 @@ def test_get_request_forwards_status_and_body():
     r = client.get("/proxy/api/tags")
     assert r.status_code == 200
     assert r.json() == {"models": [{"name": "qwen2.5-coder:14b"}]}
+
+
+def test_post_request_forwards_body_bytes():
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = request.content
+        seen["content_type"] = request.headers.get("content-type")
+        return httpx.Response(200, json={"ok": True})
+
+    client = _wrap_proxy("http://upstream.test", httpx.MockTransport(handler))
+    payload = b'{"model": "qwen2.5-coder:14b", "messages": []}'
+    r = client.post(
+        "/proxy/api/chat",
+        content=payload,
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 200
+    assert seen["body"] == payload
+    assert seen["content_type"] == "application/json"
+
+
+def test_streaming_response_chunks_pass_through_in_order():
+    chunks = [b'{"chunk":1}\n', b'{"chunk":2}\n', b'{"chunk":3}\n']
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=httpx.ByteStream(b"".join(chunks)))
+
+    client = _wrap_proxy("http://upstream.test", httpx.MockTransport(handler))
+    with client.stream("POST", "/proxy/api/chat") as r:
+        assert r.status_code == 200
+        got = b"".join(r.iter_raw())
+    assert got == b"".join(chunks)
+
+
+def test_authorization_header_does_not_leak_upstream():
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization")
+        return httpx.Response(200, json={})
+
+    client = _wrap_proxy("http://upstream.test", httpx.MockTransport(handler))
+    r = client.get(
+        "/proxy/api/tags",
+        headers={"authorization": "Bearer balu_secret123"},
+    )
+    assert r.status_code == 200
+    assert seen["authorization"] is None
