@@ -27,9 +27,7 @@ def _wrap_proxy(base_url: str, transport: httpx.AsyncBaseTransport) -> TestClien
 
     @app.api_route("/proxy/{path:path}", methods=["GET", "POST"])
     async def _entry(path: str, request: Request):
-        return await proxy_request(
-            request, path, base_url=base_url, transport=transport
-        )
+        return await proxy_request(request, path, base_url=base_url, transport=transport)
 
     return TestClient(app)
 
@@ -93,3 +91,31 @@ def test_authorization_header_does_not_leak_upstream():
     )
     assert r.status_code == 200
     assert seen["authorization"] is None
+
+
+def test_upstream_5xx_passes_through_with_body():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "ollama warming up"})
+
+    client = _wrap_proxy("http://upstream.test", httpx.MockTransport(handler))
+    r = client.get("/proxy/api/tags")
+    assert r.status_code == 503
+    assert r.json() == {"error": "ollama warming up"}
+
+
+def test_upstream_connect_failure_surfaces_as_500():
+    """No upstream listening on this port; httpx raises, we let FastAPI surface it.
+
+    We deliberately do NOT wrap the proxy in a try/except - that would mask
+    bugs. FastAPI converts unhandled exceptions to 500. The test pins that
+    behaviour so a future 'add error handling' change is intentional.
+    """
+    app = FastAPI()
+
+    @app.api_route("/proxy/{path:path}", methods=["GET"])
+    async def _entry(path: str, request: Request):
+        return await proxy_request(request, path, base_url="http://127.0.0.1:1")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    r = client.get("/proxy/api/tags")
+    assert r.status_code == 500
