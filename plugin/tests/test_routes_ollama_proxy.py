@@ -34,3 +34,42 @@ async def test_ollama_route_requires_authentication():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         r = await client.get("/api/plugins/balu_code/ollama/api/tags")
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ollama_route_proxies_tags_request():
+    import respx
+
+    app = _app()
+    transport = ASGITransport(app=app)
+
+    with respx.mock(base_url="http://upstream.test", assert_all_called=False) as mock:
+        mock.get("/api/tags").mock(
+            return_value=httpx.Response(200, json={"models": [{"name": "qwen2.5-coder:14b"}]})
+        )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get("/api/plugins/balu_code/ollama/api/tags")
+
+    assert r.status_code == 200
+    assert r.json() == {"models": [{"name": "qwen2.5-coder:14b"}]}
+
+
+@pytest.mark.asyncio
+async def test_ollama_route_proxies_chat_post_with_streaming():
+    import respx
+
+    app = _app()
+    transport = ASGITransport(app=app)
+    chunks = b'{"chunk":1}\n{"chunk":2}\n{"chunk":3}\n'
+
+    with respx.mock(base_url="http://upstream.test", assert_all_called=False) as mock:
+        mock.post("/api/chat").mock(return_value=httpx.Response(200, content=chunks))
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.post(
+                "/api/plugins/balu_code/ollama/api/chat",
+                content=b'{"model":"qwen2.5-coder:14b","messages":[]}',
+                headers={"content-type": "application/json"},
+            )
+
+    assert r.status_code == 200
+    assert r.content == chunks
