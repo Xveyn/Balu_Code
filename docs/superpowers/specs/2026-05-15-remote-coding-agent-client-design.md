@@ -91,25 +91,28 @@ opencode-linux-x86_64 (v1.14.50)          │  validates `balu_…` key
 
 **Client-side:**
 
-- `docs/remote-client.md` (new) — install guide:
-  1. Create a BaluHost API key in the web UI (User → API Keys → Create).
-  2. Download opencode v1.14.50 (same as server pin) from upstream releases,
-     SHA-256-verify against the same checksum the plugin uses.
-  3. Drop a config file at `~/.config/opencode/opencode.json` (template below).
-  4. Export `BALU_API_KEY=balu_…` in shell rc.
-  5. `cd ~/projects/foo && opencode`.
-- Template `docs/remote-client/opencode.json`:
+- `docs/remote-client.md` (new) — install guide. Two paths:
+  - **Bootstrap script** (recommended): `./scripts/bootstrap-remote-client.sh`
+    handles download, checksum verify, key prompt, and config rendering.
+  - **Manual**: download opencode v1.14.50 from upstream + SHA-256-verify,
+    create an API key in BaluHost (User → API Keys → New), copy
+    `docs/remote-client/opencode.json.tmpl` to `~/.config/opencode/opencode.json`,
+    replace the four `__PLACEHOLDER__` tokens (`__BASE_URL__`, `__API_KEY__`,
+    `__MODEL__`, `__NUM_CTX__`), `chmod 0600` the file, then `cd ~/projects/foo && opencode`.
+- Template `docs/remote-client/opencode.json.tmpl` (rendered by the bootstrap
+  script — placeholders are replaced before the file lands at
+  `~/.config/opencode/opencode.json`):
   ```json
   {
     "$schema": "https://opencode.ai/config.json",
-    "model": "ollama/qwen2.5-coder:14b",
+    "model": "ollama/__MODEL__",
     "provider": {
       "ollama": {
         "npm": "ollama-ai-provider-v2",
         "name": "BaluHost remote Ollama",
         "options": {
-          "baseURL": "https://baluhost.example/api/plugins/balu_code/ollama/api",
-          "headers": { "Authorization": "Bearer $BALU_API_KEY" }
+          "baseURL": "__BASE_URL__",
+          "headers": { "Authorization": "Bearer __API_KEY__" }
         }
       }
     }
@@ -219,15 +222,17 @@ Known limitations, accepted for v1:
 
 ## Decisions locked in during spec review
 
-- **`$BALU_API_KEY` env expansion is the default.** The implementation plan
-  will first verify opencode honors `$VAR` substitution in JSON config string
-  values (a 30-second smoke test against the local opencode binary). If it
-  doesn't, fall back to a one-line shell wrapper that runs
-  `envsubst < opencode.json.tmpl > opencode.json` before launching — not a
-  spec change, just a planning contingency.
+- **API key lives in the rendered config file, not in an env var.** The
+  bootstrap script renders a template into `~/.config/opencode/opencode.json`
+  (mode 0600) with the key substituted in directly. Rationale: avoids the
+  unverified assumption that opencode's JSON loader does shell-style `$VAR`
+  expansion; no shell-rc edit needed; security delta vs. an env var is
+  negligible (env vars are equally readable via `/proc/<pid>/environ` to
+  anyone who can read a 0600 file). The bootstrap script also keeps a
+  separate copy of the raw key in `~/.config/balu-code/api_key` (0600) so
+  re-running the script without `--new-key` doesn't re-prompt.
 - **Ship `scripts/bootstrap-remote-client.sh`.** Downloads opencode binary,
-  verifies checksum (reuses `BINARY_CHECKSUMS` from `opencode_runtime.py`),
-  writes `~/.config/opencode/opencode.json` from a template, prompts for the
-  API key once, appends `export BALU_API_KEY=…` to the user's shell rc with
-  consent. Idempotent: re-running on an already-bootstrapped host re-verifies
-  the binary and updates the config without clobbering the key.
+  verifies checksum (same pinned sha256 as `opencode_runtime.py`), prompts
+  for API key on first run, renders the config template. Idempotent:
+  re-running on an already-bootstrapped host re-verifies the binary and
+  re-renders the config without clobbering the key.
