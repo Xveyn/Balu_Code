@@ -53,13 +53,17 @@ async def proxy_request(
     body = await request.body()
 
     client = httpx.AsyncClient(transport=transport, timeout=timeout)
-    upstream_req = client.build_request(
-        method=request.method,
-        url=target,
-        headers=forward_headers,
-        content=body,
-    )
-    upstream = await client.send(upstream_req, stream=True)
+    try:
+        upstream_req = client.build_request(
+            method=request.method,
+            url=target,
+            headers=forward_headers,
+            content=body,
+        )
+        upstream = await client.send(upstream_req, stream=True)
+    except BaseException:
+        await client.aclose()
+        raise
 
     response_headers = {
         k: v for k, v in upstream.headers.items() if k.lower() not in _HEADERS_TO_DROP
