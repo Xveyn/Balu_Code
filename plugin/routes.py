@@ -61,6 +61,7 @@ from .services.project_store import (
     ProjectNotFoundError,
     ProjectStore,
 )
+from .services.repo_map import ProjectRootNotAccessible, RepoMap
 from .services.session_bridge import SessionBridge
 from .services.system import get_gpu_info
 
@@ -269,9 +270,33 @@ def build_router() -> APIRouter:
         model_str = body.model or f"ollama/{get_plugin_config().chat_model}"
         provider, model_id = _split_model(model_str)
 
+        # Assemble prompt text: prepend the repo-map envelope (if enabled +
+        # the project root exists) so opencode/qwen-coder starts each turn
+        # with file/symbol awareness instead of having to grep.
+        prompt_text = last_user.content
+        config = get_plugin_config()
+        if config.repo_map_enabled:
+            store = get_project_store()
+            try:
+                project = await asyncio.to_thread(store.get_project, project_id)
+                repo_map = RepoMap(Path(project.root_path), store, project_id)
+                files = await asyncio.to_thread(repo_map.walk_and_cache)
+                rendered = RepoMap.render(
+                    files,
+                    budget_tokens=config.repo_map_budget,
+                    project_name=project.name,
+                )
+                prompt_text = (
+                    f"{rendered.text}\n\n"
+                    f"<user_message>\n{last_user.content}\n</user_message>"
+                )
+            except (ProjectNotFoundError, ProjectRootNotAccessible):
+                # Silently degrade — chat still works without the map.
+                prompt_text = last_user.content
+
         result = await client.prompt(
             session_id,
-            text=last_user.content,
+            text=prompt_text,
             model_provider=provider,
             model_id=model_id,
         )

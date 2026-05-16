@@ -38,6 +38,13 @@ def app_with_mocked_client(monkeypatch):
     monkeypatch.setattr("plugin.deps.get_opencode_client", lambda: fake_client)
     monkeypatch.setattr("plugin.routes._session_bridge", lambda: fake_bridge)
 
+    # Provide a config with repo_map_enabled=False so existing tests keep
+    # their simple "text == raw content" assertion without needing a store.
+    from plugin.config import BaluCodePluginConfig
+
+    fake_cfg = BaluCodePluginConfig(repo_map_enabled=False)
+    monkeypatch.setattr("plugin.deps.get_plugin_config", lambda: fake_cfg)
+
     audit_calls = []
     fake_audit = AsyncMock()
 
@@ -85,7 +92,7 @@ def test_chat_v2_cancel_calls_session_abort(app_with_mocked_client):
 
 def test_chat_v2_uses_plugin_default_model_when_not_provided(app_with_mocked_client, monkeypatch):
     app, _, fake_client = app_with_mocked_client
-    fake_cfg = type("C", (), {"chat_model": "llama3:8b"})()
+    fake_cfg = type("C", (), {"chat_model": "llama3:8b", "repo_map_enabled": False})()
     monkeypatch.setattr("plugin.deps.get_plugin_config", lambda: fake_cfg)
     with TestClient(app) as client:
         resp = client.post(
@@ -122,3 +129,122 @@ def test_runtime_restart_returns_501(app_with_mocked_client):
     with TestClient(app) as client:
         resp = client.post("/runtime/restart")
         assert resp.status_code == 501
+
+
+def test_chat_v2_prepends_repo_map_envelope(monkeypatch, tmp_path):
+    """The user-message text sent to opencode must start with a <repo_map> block."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from unittest.mock import AsyncMock
+
+    from plugin import deps
+    from plugin.config import BaluCodePluginConfig
+    from plugin.routes import build_router
+    from plugin.services.audit import AuditLogger
+    from plugin.services.ollama_client import OllamaClient
+    from plugin.services.opencode_client import OpencodeClient
+    from plugin.services.project_store import ProjectStore
+
+    # Real project + a real source file so the walker has work
+    root = tmp_path / "userproj"
+    root.mkdir()
+    (root / "hello.py").write_text("def hello(): return 1\n")
+
+    store = ProjectStore(tmp_path / "store.db")
+    project = store.create_project("p", str(root), None)
+    store.set_opencode_session_id(project.id, "ses_test")
+
+    audit = AuditLogger(tmp_path / "audit.db")
+    config = BaluCodePluginConfig()
+    deps.set_singletons(
+        store=store,
+        ollama=OllamaClient("http://127.0.0.1:11434"),
+        plugin_config=config,
+        audit_log=audit,
+        data_dir=tmp_path,
+    )
+
+    fake_opencode = AsyncMock(spec=OpencodeClient)
+    fake_opencode.prompt = AsyncMock(
+        return_value={"info": {"id": "msg"}, "parts": [{"type": "text", "text": "ok"}]}
+    )
+    fake_opencode.create_session = AsyncMock(return_value="ses_test")
+    deps.set_opencode(handle=None, client=fake_opencode)  # type: ignore[arg-type]
+
+    app = FastAPI()
+    app.include_router(build_router())
+
+    # Auth bypass
+    from app.api import deps as app_deps
+
+    app.dependency_overrides[app_deps.get_current_user] = lambda: object()
+
+    client = TestClient(app)
+    resp = client.post(
+        f"/chat/v2/{project.id}",
+        json={"messages": [{"role": "user", "content": "list the files"}]},
+    )
+    assert resp.status_code == 200
+
+    args, kwargs = fake_opencode.prompt.call_args
+    sent_text = kwargs["text"] if "text" in kwargs else args[1]
+    assert sent_text.startswith("<repo_map")
+    assert "hello.py" in sent_text
+    assert "<user_message>" in sent_text
+    assert "list the files" in sent_text
+
+
+def test_chat_v2_skips_map_when_disabled(monkeypatch, tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from unittest.mock import AsyncMock
+
+    from plugin import deps
+    from plugin.config import BaluCodePluginConfig
+    from plugin.routes import build_router
+    from plugin.services.audit import AuditLogger
+    from plugin.services.ollama_client import OllamaClient
+    from plugin.services.opencode_client import OpencodeClient
+    from plugin.services.project_store import ProjectStore
+
+    root = tmp_path / "userproj"
+    root.mkdir()
+    (root / "hello.py").write_text("def hello(): return 1\n")
+
+    store = ProjectStore(tmp_path / "store.db")
+    project = store.create_project("p", str(root), None)
+    store.set_opencode_session_id(project.id, "ses_test")
+
+    audit = AuditLogger(tmp_path / "audit.db")
+    config = BaluCodePluginConfig(repo_map_enabled=False)
+    deps.set_singletons(
+        store=store,
+        ollama=OllamaClient("http://127.0.0.1:11434"),
+        plugin_config=config,
+        audit_log=audit,
+        data_dir=tmp_path,
+    )
+
+    fake_opencode = AsyncMock(spec=OpencodeClient)
+    fake_opencode.prompt = AsyncMock(
+        return_value={"info": {"id": "msg"}, "parts": [{"type": "text", "text": "ok"}]}
+    )
+    fake_opencode.create_session = AsyncMock(return_value="ses_test")
+    deps.set_opencode(handle=None, client=fake_opencode)  # type: ignore[arg-type]
+
+    app = FastAPI()
+    app.include_router(build_router())
+    from app.api import deps as app_deps
+
+    app.dependency_overrides[app_deps.get_current_user] = lambda: object()
+
+    client = TestClient(app)
+    resp = client.post(
+        f"/chat/v2/{project.id}",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 200
+
+    args, kwargs = fake_opencode.prompt.call_args
+    sent_text = kwargs["text"] if "text" in kwargs else args[1]
+    assert sent_text == "hi"  # raw user content, no envelope
