@@ -154,6 +154,29 @@ def _deserialize_symbols(blob: str, relpath: str) -> FileSymbols:
     )
 
 
+def _render_class_block(c: ClassSymbol) -> str:
+    head = f"  class {c.name}({', '.join(c.bases)}):" if c.bases else f"  class {c.name}:"
+    if not c.methods:
+        return head
+    method_lines = "\n".join(f"    {m}" for m in c.methods)
+    return f"{head}\n{method_lines}"
+
+
+def _render_file_block(fs: FileSymbols) -> str:
+    lines: list[str] = [f"=== {fs.path} ({fs.lines} lines)"]
+    if fs.imports:
+        lines.append(f"imports: {', '.join(fs.imports)}")
+    if fs.classes:
+        lines.append("classes:")
+        for c in fs.classes:
+            lines.append(_render_class_block(c))
+    if fs.functions:
+        lines.append("functions:")
+        for f in fs.functions:
+            lines.append(f"  {f.signature}")
+    return "\n".join(lines)
+
+
 class RepoMap:
     """Walks a project root, caches parsed symbols, renders a budget-aware map."""
 
@@ -236,8 +259,48 @@ class RepoMap:
         budget_tokens: int = 2048,
         project_name: str = "",
     ) -> RenderedMap:
-        # Implemented in Task 11.
-        raise NotImplementedError
+        """Render `files` into a token-budgeted <repo_map>…</repo_map> envelope.
+
+        Files are sorted alphabetically by path. Each file block is appended
+        in order while accumulated `len(text) // 4` stays under budget.
+        Remaining files are dropped into truncated_files.
+        """
+        from datetime import UTC, datetime
+
+        sorted_files = sorted(files, key=lambda f: f.path)
+        included_blocks: list[str] = []
+        truncated: list[str] = []
+
+        body_budget = max(0, budget_tokens)
+        accumulated_chars = 0
+        char_budget = body_budget * 4
+
+        for fs in sorted_files:
+            block = _render_file_block(fs)
+            block_chars = len(block)
+            if truncated or (accumulated_chars + block_chars) > char_budget:
+                truncated.append(fs.path)
+                continue
+            included_blocks.append(block)
+            accumulated_chars += block_chars
+
+        body = "\n".join(included_blocks)
+        generated = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        open_tag = (
+            f'<repo_map project="{project_name}" generated="{generated}" '
+            f'budget="{body_budget}" files="{len(included_blocks)}">'
+        )
+        if body:
+            text = f"{open_tag}\n{body}\n</repo_map>"
+        else:
+            text = f"{open_tag}\n</repo_map>"
+
+        return RenderedMap(
+            text=text,
+            file_count=len(included_blocks),
+            truncated_files=truncated,
+            total_bytes=len(text.encode("utf-8")),
+        )
 
 
 __all__ = [
