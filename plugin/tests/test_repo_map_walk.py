@@ -9,7 +9,6 @@ import pytest
 
 from plugin.services.project_store import ProjectStore
 from plugin.services.repo_map import (
-    FileSymbols,
     ProjectRootNotAccessible,
     RepoMap,
 )
@@ -169,13 +168,18 @@ def test_walk_treats_stale_payload_version_as_cache_miss(store, project):
     # would normally return it without parsing.
     mtime = f.stat().st_mtime
     import hashlib
+
     sha1 = hashlib.sha1(f.read_bytes()).hexdigest()
     store.upsert_repo_map_entry(
-        pid, "a.py", mtime, sha1,
+        pid,
+        "a.py",
+        mtime,
+        sha1,
         '{"v":999,"lines":1,"imports":[],"classes":[],"functions":[]}',
     )
 
     from plugin.services.repo_map import RepoMap
+
     rm = RepoMap(root, store, project_id=pid)
     files = rm.walk_and_cache()
     # Stale v=999 row must be rejected; the walker re-parses and gets `foo`.

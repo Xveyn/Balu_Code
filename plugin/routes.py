@@ -358,8 +358,7 @@ def build_router() -> APIRouter:
                     project_name=project.name,
                 )
                 prompt_text = (
-                    f"{rendered.text}\n\n"
-                    f"<user_message>\n{last_user.content}\n</user_message>"
+                    f"{rendered.text}\n\n" f"<user_message>\n{last_user.content}\n</user_message>"
                 )
             except (ProjectNotFoundError, ProjectRootNotAccessible):
                 # Silently degrade — chat still works without the map.

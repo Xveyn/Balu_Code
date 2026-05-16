@@ -121,13 +121,8 @@ def _serialize_symbols(
             "v": _PAYLOAD_VERSION,
             "lines": lines,
             "imports": imports,
-            "classes": [
-                {"name": c.name, "bases": c.bases, "methods": c.methods}
-                for c in classes
-            ],
-            "functions": [
-                {"name": f.name, "signature": f.signature} for f in functions
-            ],
+            "classes": [{"name": c.name, "bases": c.bases, "methods": c.methods} for c in classes],
+            "functions": [{"name": f.name, "signature": f.signature} for f in functions],
         },
         separators=(",", ":"),
     )
@@ -204,9 +199,9 @@ class RepoMap:
             except OSError:
                 continue
 
-            def _try_deserialize(row) -> FileSymbols | None:
+            def _try_deserialize(row, _relpath=relpath) -> FileSymbols | None:
                 try:
-                    return _deserialize_symbols(row.symbols_json, relpath)
+                    return _deserialize_symbols(row.symbols_json, _relpath)
                 except ValueError:
                     return None
 
@@ -290,10 +285,7 @@ class RepoMap:
             f'<repo_map project="{project_name}" generated="{generated}" '
             f'budget="{body_budget}" files="{len(included_blocks)}">'
         )
-        if body:
-            text = f"{open_tag}\n{body}\n</repo_map>"
-        else:
-            text = f"{open_tag}\n</repo_map>"
+        text = f"{open_tag}\n{body}\n</repo_map>" if body else f"{open_tag}\n</repo_map>"
 
         return RenderedMap(
             text=text,

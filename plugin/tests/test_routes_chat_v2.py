@@ -133,9 +133,10 @@ def test_runtime_restart_returns_501(app_with_mocked_client):
 
 def test_chat_v2_prepends_repo_map_envelope(monkeypatch, tmp_path):
     """The user-message text sent to opencode must start with a <repo_map> block."""
+    from unittest.mock import AsyncMock
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from unittest.mock import AsyncMock
 
     from plugin import deps
     from plugin.config import BaluCodePluginConfig
@@ -195,9 +196,10 @@ def test_chat_v2_prepends_repo_map_envelope(monkeypatch, tmp_path):
 
 
 def test_chat_v2_skips_map_when_disabled(monkeypatch, tmp_path):
+    from unittest.mock import AsyncMock
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from unittest.mock import AsyncMock
 
     from plugin import deps
     from plugin.config import BaluCodePluginConfig

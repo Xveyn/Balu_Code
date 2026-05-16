@@ -26,9 +26,7 @@ def test_dispatches_jsx():
 
 
 def test_dispatches_tsx():
-    _, _, functions = parse_file(
-        b"function Comp(): JSX.Element { return null as any; }\n", ".tsx"
-    )
+    _, _, functions = parse_file(b"function Comp(): JSX.Element { return null as any; }\n", ".tsx")
     assert functions[0].name == "Comp"
 
 

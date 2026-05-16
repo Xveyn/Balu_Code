@@ -88,7 +88,9 @@ def test_post_repo_map_rebuild_clears_cache(app_factory):
     assert resp.json()["file_count"] == 1
 
 
-@pytest.mark.skip(reason="stub get_current_user permissively returns a user without credentials; auth enforcement requires real BaluHost middleware")
+@pytest.mark.skip(
+    reason="stub get_current_user permissively returns a user without credentials; auth enforcement requires real BaluHost middleware"
+)
 def test_get_repo_map_401_when_unauthenticated(tmp_path):
     """When dependency_overrides are not set, get_current_user enforces auth."""
     store = ProjectStore(tmp_path / "store.db")
