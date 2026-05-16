@@ -145,6 +145,13 @@ class RuntimeCredentialsResponse(BaseModel):
     password: str
 
 
+class RepoMapResponse(BaseModel):
+    text: str
+    file_count: int
+    truncated_files: list[str]
+    total_bytes: int
+
+
 __all__ = [
     "ApprovalSummary",
     "ChatV2Message",
@@ -160,6 +167,7 @@ __all__ = [
     "OllamaSystemInfo",
     "ProjectCreate",
     "ProjectsResponse",
+    "RepoMapResponse",
     "RuntimeCredentialsResponse",
     "RuntimeStatusResponse",
     "StatsResponse",
