@@ -99,7 +99,7 @@ def _iter_source_files(project_root: Path):
         except (PermissionError, FileNotFoundError):
             continue
         for entry in entries:
-            if entry.is_dir():
+            if entry.is_dir() and not entry.is_symlink():
                 if entry.name in _IGNORE_DIRS:
                     continue
                 if entry.name.startswith(".") and entry.name not in {"."}:
@@ -135,6 +135,10 @@ def _serialize_symbols(
 
 def _deserialize_symbols(blob: str, relpath: str) -> FileSymbols:
     raw = json.loads(blob)
+    if raw.get("v") != _PAYLOAD_VERSION:
+        raise ValueError(
+            f"repo_map cache version mismatch: expected {_PAYLOAD_VERSION}, got {raw.get('v')!r}"
+        )
     return FileSymbols(
         path=relpath,
         lines=raw.get("lines", 0),
@@ -177,10 +181,18 @@ class RepoMap:
             except OSError:
                 continue
 
+            def _try_deserialize(row) -> FileSymbols | None:
+                try:
+                    return _deserialize_symbols(row.symbols_json, relpath)
+                except ValueError:
+                    return None
+
             cached = existing.get(relpath)
             if cached is not None and abs(cached.mtime - mtime) < 1e-6:
-                results.append(_deserialize_symbols(cached.symbols_json, relpath))
-                continue
+                fs = _try_deserialize(cached)
+                if fs is not None:
+                    results.append(fs)
+                    continue
 
             try:
                 raw = fs_path.read_bytes()
@@ -191,11 +203,13 @@ class RepoMap:
 
             if cached is not None and cached.sha1 == sha1:
                 # mtime touched without content change: refresh mtime, reuse symbols.
-                self._store.upsert_repo_map_entry(
-                    self._pid, relpath, mtime, sha1, cached.symbols_json
-                )
-                results.append(_deserialize_symbols(cached.symbols_json, relpath))
-                continue
+                fs = _try_deserialize(cached)
+                if fs is not None:
+                    self._store.upsert_repo_map_entry(
+                        self._pid, relpath, mtime, sha1, cached.symbols_json
+                    )
+                    results.append(fs)
+                    continue
 
             extension = fs_path.suffix
             imports, classes, functions = parse_file(raw, extension)
