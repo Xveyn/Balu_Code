@@ -40,6 +40,7 @@ from .schemas import (
     OllamaSystemInfo,
     ProjectCreate,
     ProjectsResponse,
+    RepoMapResponse,
     RuntimeCredentialsResponse,
     RuntimeStatusResponse,
     StatsResponse,
@@ -224,6 +225,76 @@ def build_router() -> APIRouter:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"project {project_id} not found",
             ) from exc
+
+    @router.get(
+        "/projects/{project_id}/repo_map",
+        response_model=RepoMapResponse,
+        tags=["balu_code"],
+    )
+    async def get_repo_map_route(
+        project_id: int,
+        budget: int = Query(default=2048, ge=64, le=32768),
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+    ) -> RepoMapResponse:
+        try:
+            project = await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
+        repo_map = RepoMap(Path(project.root_path), store, project_id)
+        try:
+            files = await asyncio.to_thread(repo_map.walk_and_cache)
+        except ProjectRootNotAccessible as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"project root not accessible: {exc}",
+            ) from exc
+        rendered = RepoMap.render(files, budget_tokens=budget, project_name=project.name)
+        return RepoMapResponse(
+            text=rendered.text,
+            file_count=rendered.file_count,
+            truncated_files=rendered.truncated_files,
+            total_bytes=rendered.total_bytes,
+        )
+
+    @router.post(
+        "/projects/{project_id}/repo_map/rebuild",
+        response_model=RepoMapResponse,
+        tags=["balu_code"],
+    )
+    async def rebuild_repo_map_route(
+        project_id: int,
+        budget: int = Query(default=2048, ge=64, le=32768),
+        _user: UserPublic = Depends(get_current_user),
+        store: ProjectStore = Depends(get_project_store),
+    ) -> RepoMapResponse:
+        try:
+            project = await asyncio.to_thread(store.get_project, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"project {project_id} not found",
+            ) from exc
+        # Drop the entire cache for this project, then walk afresh.
+        await asyncio.to_thread(store.delete_repo_map_entries, project_id, set())
+        repo_map = RepoMap(Path(project.root_path), store, project_id)
+        try:
+            files = await asyncio.to_thread(repo_map.walk_and_cache)
+        except ProjectRootNotAccessible as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"project root not accessible: {exc}",
+            ) from exc
+        rendered = RepoMap.render(files, budget_tokens=budget, project_name=project.name)
+        return RepoMapResponse(
+            text=rendered.text,
+            file_count=rendered.file_count,
+            truncated_files=rendered.truncated_files,
+            total_bytes=rendered.total_bytes,
+        )
 
     @router.get("/models", response_model=ModelsResponse, tags=["balu_code"])
     async def list_models_route(
