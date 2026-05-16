@@ -21,7 +21,8 @@ class BaluCodePluginConfig(BaseModel):
 
     # Phase 4a agent-loop knobs
     context_window: int = 32768
-    repo_map_budget: int = 6144
+    repo_map_enabled: bool = True
+    repo_map_budget: int = 2048
     rag_budget: int = 4096
     rag_top_k: int = 8
     max_iterations: int = 12

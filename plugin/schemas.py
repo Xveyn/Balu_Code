@@ -34,6 +34,7 @@ class ConfigUpdateRequest(BaseModel):
     chat_model: str | None = None
     embed_model: str | None = None
     context_window: int | None = None
+    repo_map_enabled: bool | None = None
     repo_map_budget: int | None = None
     rag_budget: int | None = None
     rag_top_k: int | None = None

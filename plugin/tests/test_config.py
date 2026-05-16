@@ -35,7 +35,8 @@ def test_rejects_unknown_fields():
 def test_defaults_for_phase_4a_fields():
     c = BaluCodePluginConfig()
     assert c.context_window == 32768
-    assert c.repo_map_budget == 6144
+    assert c.repo_map_enabled is True
+    assert c.repo_map_budget == 2048
     assert c.rag_budget == 4096
     assert c.rag_top_k == 8
     assert c.max_iterations == 12
@@ -73,3 +74,15 @@ def test_config_update_request_accepts_poll_interval():
 def test_config_update_request_rejects_poll_interval_below_3():
     with pytest.raises(ValidationError):
         ConfigUpdateRequest(poll_interval_seconds=2)
+
+
+def test_repo_map_enabled_defaults_true():
+    from plugin.config import BaluCodePluginConfig
+
+    assert BaluCodePluginConfig().repo_map_enabled is True
+
+
+def test_repo_map_budget_default_is_2048():
+    from plugin.config import BaluCodePluginConfig
+
+    assert BaluCodePluginConfig().repo_map_budget == 2048
