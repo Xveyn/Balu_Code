@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from plugin.services.project_store import ProjectStore
+from .project_store import ProjectStore
 
 _SOURCE_EXTENSIONS = frozenset({".py", ".js", ".jsx", ".ts", ".tsx"})
 _IGNORE_DIRS = frozenset(
@@ -187,7 +187,7 @@ class RepoMap:
         # Index existing cache rows by file_path for O(1) lookup.
         existing = {r.file_path: r for r in self._store.list_repo_map_entries(self._pid)}
 
-        from plugin.services.parsers import parse_file  # local import: avoid cycles
+        from .parsers import parse_file  # local import: avoid cycles
 
         visited: set[str] = set()
         results: list[FileSymbols] = []

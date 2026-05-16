@@ -11,7 +11,7 @@ from __future__ import annotations
 import tree_sitter_python
 from tree_sitter import Language, Parser
 
-from plugin.services.repo_map import ClassSymbol, FunctionSymbol
+from ..repo_map import ClassSymbol, FunctionSymbol
 
 _LANG = Language(tree_sitter_python.language())
 _PARSER: Parser | None = None

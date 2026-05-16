@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from plugin.services.parsers.js_ts import parse_js_ts_file
-from plugin.services.parsers.python import parse_python_file
-from plugin.services.repo_map import ClassSymbol, FunctionSymbol
+from ..repo_map import ClassSymbol, FunctionSymbol
+from .js_ts import parse_js_ts_file
+from .python import parse_python_file
 
 _JS_TS_EXTENSIONS = frozenset({".js", ".jsx", ".ts", ".tsx"})
 

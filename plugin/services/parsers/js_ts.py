@@ -16,7 +16,7 @@ import tree_sitter_javascript
 import tree_sitter_typescript
 from tree_sitter import Language, Parser
 
-from plugin.services.repo_map import ClassSymbol, FunctionSymbol
+from ..repo_map import ClassSymbol, FunctionSymbol
 
 _JS_LANG = Language(tree_sitter_javascript.language())
 _TS_LANG = Language(tree_sitter_typescript.language_typescript())
