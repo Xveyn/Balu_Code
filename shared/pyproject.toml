@@ -6,8 +6,7 @@ build-backend = "hatchling.build"
 name = "balu-code-shared"
 version = "0.1.0"
 description = "Shared Pydantic event and config schemas for Balu Code plugin and CLI."
-readme = "../README.md"
-license = { file = "../LICENSE" }
+license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "Xveyn" }]
 dependencies = [
