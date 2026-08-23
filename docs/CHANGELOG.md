@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- The Windows bootstrap wrote its config to `%APPDATA%\opencode\opencode.json`,
+  which opencode never reads — it resolves `$XDG_CONFIG_HOME`/`~/.config` on
+  Windows as well. Symptom: the client ran against whatever stale config
+  happened to sit in `~/.config`, or reported a missing API key.
+
 ### Changed
 - **Breaking:** the plugin's own config endpoints moved from `/config` to
   `/settings` (`GET`/`PUT /api/plugins/balu_code/settings`). BaluHost registers
