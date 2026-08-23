@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Fixed
+- `deploy-local.sh` kept its backups inside the plugins directory, where
+  BaluHost discovers every `plugin.json`-carrying folder as a plugin — each
+  deploy added a second "Balu Code" entry to the Plugins page, pointing at
+  stale code. Backups now go to `/var/backups/balu_code/` (`--backup-dir`), and
+  leftovers next to the install are moved out on the next run.
 - The Windows bootstrap wrote its config to `%APPDATA%\opencode\opencode.json`,
   which opencode never reads — it resolves `$XDG_CONFIG_HOME`/`~/.config` on
   Windows as well. Symptom: the client ran against whatever stale config
