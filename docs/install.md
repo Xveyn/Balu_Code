@@ -98,12 +98,19 @@ cd Balu_Code
 scripts/deploy-local.sh
 ```
 
-It builds the artefact, keeps the current install as a timestamped `.bak-`
-directory, swaps in the new one, restarts `baluhost-backend`, and then checks
+It builds the artefact, keeps the current install as a timestamped copy under
+`/var/backups/balu_code/` (`--backup-dir` to change it), swaps in the new one,
+restarts `baluhost-backend`, and then checks
 `GET /api/plugins/balu_code/health`. A 200 means the plugin's own router
 answered; a 401 means the request fell through to BaluHost's sandbox catch-all,
 i.e. the plugin failed to load — in that case the previous directory is restored
 and the backend restarted again, so a failed update leaves a working plugin.
+
+Backups deliberately live outside `installed/`: BaluHost treats every directory
+there that carries a `plugin.json` as a plugin, so a backup parked next to the
+install shows up in the Plugins page as a second entry with the same name — and
+would load stale code if anyone enabled it. Leftovers from older versions of the
+script are moved out on the next run.
 
 Plugin *data* (projects DB, `opencode.json`, the opencode binary, the runtime
 password) lives in the service user's `~/.local/share/balu-code` and is never

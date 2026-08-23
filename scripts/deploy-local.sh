@@ -16,6 +16,12 @@
 # password) lives in the service user's ~/.local/share/balu-code and is never
 # touched here — only the code directory is replaced.
 #
+# Backups go to a directory OUTSIDE the install root: BaluHost treats every
+# subdirectory of backend/app/plugins/installed/ that holds a plugin.json as a
+# plugin, so a backup parked next to the install shows up in the Plugins page
+# as a second, identical-looking entry — one that would load stale code if
+# someone enabled it.
+#
 # Usage:
 #   scripts/deploy-local.sh                          # build, install, restart
 #   scripts/deploy-local.sh --artefact x.bhplugin    # install a prebuilt archive
@@ -24,7 +30,8 @@
 # The file owner defaults to the User=/Group= of the systemd unit, so it follows
 # whatever the install actually uses. Every other default can be overridden by
 # flag or environment variable:
-#   INSTALL_ROOT, SERVICE, OWNER, BACKEND_URL, KEEP_BACKUPS, HEALTH_TIMEOUT
+#   INSTALL_ROOT, SERVICE, OWNER, BACKEND_URL, BACKUP_DIR, KEEP_BACKUPS,
+#   HEALTH_TIMEOUT
 #
 set -euo pipefail
 
@@ -32,6 +39,7 @@ INSTALL_ROOT="${INSTALL_ROOT:-/opt/baluhost/backend/app/plugins/installed}"
 SERVICE="${SERVICE:-baluhost-backend}"
 OWNER="${OWNER:-}"          # empty = derive from the systemd unit
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/balu_code}"
 KEEP_BACKUPS="${KEEP_BACKUPS:-3}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
 ARTEFACT=""
@@ -49,6 +57,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --artefact) ARTEFACT="${2:?--artefact needs a path}"; shift 2 ;;
         --install-root) INSTALL_ROOT="${2:?--install-root needs a path}"; shift 2 ;;
+        --backup-dir) BACKUP_DIR="${2:?--backup-dir needs a path}"; shift 2 ;;
         --service) SERVICE="${2:?--service needs a unit name}"; shift 2 ;;
         --owner) OWNER="${2:?--owner needs user:group}"; shift 2 ;;
         --backend-url) BACKEND_URL="${2:?--backend-url needs a URL}"; shift 2 ;;
@@ -100,6 +109,15 @@ fi
 NAME=$(python3 -c 'import json; print(json.load(open("plugin/plugin.json"))["name"])')
 VERSION=$(python3 -c 'import json; print(json.load(open("plugin/plugin.json"))["version"])')
 TARGET="${INSTALL_ROOT}/${NAME}"
+
+# Older versions of this script parked backups next to the install, where
+# BaluHost picks them up as extra plugins. Move any leftovers out of the way.
+for stale in "${TARGET}.bak-"*; do
+    [ -d "$stale" ] || continue
+    $SUDO mkdir -p "$BACKUP_DIR"
+    say "moving stale backup $(basename "$stale") out of the plugins directory"
+    $SUDO mv "$stale" "${BACKUP_DIR}/$(basename "$stale")"
+done
 
 if [ -z "$ARTEFACT" ]; then
     say "building ${NAME} ${VERSION}"
@@ -180,8 +198,9 @@ if [ "$RESTART" -eq 1 ]; then
 fi
 
 if [ -d "$TARGET" ]; then
-    BACKUP="${TARGET}.bak-$(date +%Y%m%d-%H%M%S)"
-    say "keeping current install as $(basename "$BACKUP")"
+    $SUDO mkdir -p "$BACKUP_DIR"
+    BACKUP="${BACKUP_DIR}/${NAME}-$(date +%Y%m%d-%H%M%S)"
+    say "keeping current install as ${BACKUP}"
     $SUDO cp -a "$TARGET" "$BACKUP"
 fi
 
@@ -223,7 +242,7 @@ fi
 trap - ERR
 
 if [ "$KEEP_BACKUPS" -gt 0 ]; then
-    ls -1dt "${TARGET}.bak-"* 2>/dev/null | tail -n "+$((KEEP_BACKUPS + 1))" | while read -r old; do
+    ls -1dt "${BACKUP_DIR}/${NAME}-"* 2>/dev/null | tail -n "+$((KEEP_BACKUPS + 1))" | while read -r old; do
         say "pruning $(basename "$old")"
         $SUDO rm -rf "$old"
     done
