@@ -18,10 +18,15 @@ Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as
 - Audit log written to BaluHost `audit_logs` table
 
 **Plugin (web UI)**
-- Models, Projects, Config, Logs, System, Stats tabs
-- Live session management via WebSocket
-- System tab: live VRAM bar, loaded models, GPU utilisation (polled every 3–30 s)
-- Stats tab: 7/14/30/90-day usage dashboard (requests, tokens, models, tools, approvals) + live active-turn banner
+- Models, Projects, Config, Runtime, Logs, System, Stats tabs
+- Runs inside BaluHost's plugin sandbox: React and a proxied API client come
+  from `window.BaluHost`, since the iframe has an opaque origin (no
+  `window.React`, no `localStorage`, no direct `fetch`)
+- Config tab: model, context window, temperature and the `think` toggle;
+  saving restarts the embedded opencode runtime
+- System tab: VRAM bar, loaded models, GPU utilisation (polled every 3–30 s;
+  needs `amd-smi`, `rocm-smi` or `nvidia-smi` on the server)
+- Stats tab: 7/14/30/90-day usage dashboard (requests, tokens, models, tools, approvals)
 
 **CLI** (via embedded opencode)
 - Interactive chat REPL with agentic approval flow
