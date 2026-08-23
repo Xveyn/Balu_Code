@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+- **Breaking:** the plugin's own config endpoints moved from `/config` to
+  `/settings` (`GET`/`PUT /api/plugins/balu_code/settings`). BaluHost registers
+  `/api/plugins/{name}/config` before plugin routers are mounted, so the plugin's
+  route never received a request — the core route answered, stored the value in
+  BaluHost's database and never handed it to the plugin. Symptoms: the Config tab
+  showed empty fields (it parsed the core `{name, config, schema}` shape) and
+  saving failed with 422 `body.config Field required`.
+
 ### Fixed
 - Plugin UI rendered a blank page: the bundle still used the pre-sandbox host
   contract (`window.React`, `localStorage` token, direct `fetch`) and died on

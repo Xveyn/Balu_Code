@@ -80,7 +80,7 @@ See [`docs/install.md`](docs/install.md) for the full installation guide includi
 Three layers applied in order (later overrides earlier):
 
 1. Server defaults (`plugin/config.py`)
-2. Persisted server config — web UI **Balu Code → Config** tab or `PUT /api/plugins/balu_code/config`
+2. Persisted server config — web UI **Balu Code → Config** tab or `PUT /api/plugins/balu_code/settings`
 3. Project-local — `.balucode.yaml` at the project root
 
 ```yaml

@@ -86,7 +86,7 @@ function ModelsTab() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([api('/models'), api('/config')])
+    Promise.all([api('/models'), api('/settings')])
       .then(([m, c]) => { setModels(m.models); setConfig(c); })
       .catch(e => setError(e.message));
   }, []);
@@ -189,7 +189,7 @@ function ProjectsTab() {
 // ── Config tab ────────────────────────────────────────────────────────────────
 
 // Only fields ConfigUpdateRequest accepts may be sent: it is extra="forbid",
-// and GET /config returns more than that (opencode_port), so echoing the whole
+// and GET /settings returns more than that (opencode_port), so echoing the whole
 // object back — which this tab used to do — is answered with 422.
 const CONFIG_FIELDS = [
   { key: 'ollama_base_url',           label: 'Ollama Base URL',                 type: 'text' },
@@ -222,7 +222,7 @@ function ConfigTab() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api('/config').then(setForm).catch(e => setError(e.message));
+    api('/settings').then(setForm).catch(e => setError(e.message));
   }, []);
 
   function set(key, value) {
@@ -234,16 +234,22 @@ function ConfigTab() {
     setSaving(true); setError(null);
     const payload = {};
     for (const f of CONFIG_FIELDS) {
-      // `think` unset cannot be restored: PUT /config drops null fields, so
+      // `think` unset cannot be restored: PUT /settings drops null fields, so
       // sending it would be a silent no-op. Skip it instead of pretending.
       if (f.key === 'think') {
         if (form.think === true || form.think === false) payload.think = form.think;
         continue;
       }
-      payload[f.key] = form[f.key];
+      const value = form[f.key];
+      // Never send blanks: an empty number input would arrive as "" or NaN and
+      // the server answers 422. PUT merges what it receives, so omitting a
+      // field simply leaves it untouched.
+      if (value === undefined || value === null || value === '') continue;
+      if (typeof value === 'number' && Number.isNaN(value)) continue;
+      payload[f.key] = value;
     }
     try {
-      const updated = await api('/config', { method: 'PUT', body: JSON.stringify(payload) });
+      const updated = await api('/settings', { method: 'PUT', body: JSON.stringify(payload) });
       setForm(updated);
       setSaved(true);
     } catch (e) { setError(e.message); }
@@ -426,7 +432,7 @@ function SystemTab() {
   const [pollMs, setPollMs] = useState(10_000);
 
   useEffect(() => {
-    api('/config').then(c => {
+    api('/settings').then(c => {
       setConfig(c);
       const interval = Math.max(3, c.poll_interval_seconds || 10) * 1000;
       setPollMs(interval);
@@ -445,7 +451,7 @@ function SystemTab() {
   async function changePollInterval(seconds) {
     const clamped = Math.max(3, seconds);
     setPollMs(clamped * 1000);
-    try { await api('/config', { method: 'PUT', body: JSON.stringify({ poll_interval_seconds: clamped }) }); }
+    try { await api('/settings', { method: 'PUT', body: JSON.stringify({ poll_interval_seconds: clamped }) }); }
     catch (e) { /* non-critical */ }
   }
 

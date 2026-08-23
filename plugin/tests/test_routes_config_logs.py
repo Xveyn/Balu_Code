@@ -43,7 +43,7 @@ class _FakeAuditLog:
 def test_get_config_returns_current_config(tmp_path):
     cfg = BaluCodePluginConfig(chat_model="qwen2.5-coder:7b")
     client = TestClient(_make_app(tmp_path, cfg))
-    r = client.get("/api/plugins/balu_code/config")
+    r = client.get("/api/plugins/balu_code/settings")
     assert r.status_code == 200
     assert r.json()["chat_model"] == "qwen2.5-coder:7b"
 
@@ -51,7 +51,7 @@ def test_get_config_returns_current_config(tmp_path):
 def test_put_config_updates_and_persists(tmp_path):
     client = TestClient(_make_app(tmp_path))
     r = client.put(
-        "/api/plugins/balu_code/config",
+        "/api/plugins/balu_code/settings",
         json={"chat_model": "qwen2.5-coder:7b", "temperature": 0.8},
     )
     assert r.status_code == 200
@@ -66,13 +66,13 @@ def test_put_config_updates_and_persists(tmp_path):
 
 def test_put_config_rejects_unknown_field(tmp_path):
     client = TestClient(_make_app(tmp_path))
-    r = client.put("/api/plugins/balu_code/config", json={"unknown_field": "x"})
+    r = client.put("/api/plugins/balu_code/settings", json={"unknown_field": "x"})
     assert r.status_code == 422
 
 
 def test_put_config_rejects_invalid_temperature(tmp_path):
     client = TestClient(_make_app(tmp_path))
-    r = client.put("/api/plugins/balu_code/config", json={"temperature": 5.0})
+    r = client.put("/api/plugins/balu_code/settings", json={"temperature": 5.0})
     assert r.status_code == 422
 
 
@@ -104,7 +104,7 @@ def test_put_config_rewrites_opencode_json(tmp_path):
 
     client = TestClient(_make_app(tmp_path))
     r = client.put(
-        "/api/plugins/balu_code/config",
+        "/api/plugins/balu_code/settings",
         json={"chat_model": "qwen3.8-code:latest", "context_window": 32768},
     )
     assert r.status_code == 200
@@ -118,7 +118,7 @@ def test_put_config_rewrites_opencode_json(tmp_path):
 def test_put_config_reports_when_runtime_was_not_restarted(tmp_path):
     """No runtime in this process -> header says so instead of implying success."""
     client = TestClient(_make_app(tmp_path))
-    r = client.put("/api/plugins/balu_code/config", json={"chat_model": "x:1b"})
+    r = client.put("/api/plugins/balu_code/settings", json={"chat_model": "x:1b"})
     assert r.status_code == 200
     assert r.headers["X-Balu-Code-Runtime-Restarted"] == "false"
 
@@ -128,7 +128,7 @@ def test_put_config_think_toggle_reaches_opencode_json(tmp_path):
 
     client = TestClient(_make_app(tmp_path))
     r = client.put(
-        "/api/plugins/balu_code/config",
+        "/api/plugins/balu_code/settings",
         json={"chat_model": "qwen3.8-code:latest", "think": False},
     )
     assert r.status_code == 200
@@ -137,3 +137,24 @@ def test_put_config_think_toggle_reaches_opencode_json(tmp_path):
     payload = json.loads((tmp_path / "opencode.json").read_text())
     model_opts = payload["provider"]["ollama"]["models"]["qwen3.8-code:latest"]["options"]
     assert model_opts["think"] is False
+
+
+def test_plugin_never_registers_a_config_route():
+    """The plugin's settings live under /settings, and must stay there.
+
+    BaluHost registers its own ``/api/plugins/{name}/config`` in
+    ``api/routes/__init__.py`` while plugin routers are mounted later from
+    ``core/lifespan.py``. FastAPI matches in registration order, so a plugin
+    route on that path never sees a request: the core route answers, validates
+    against this plugin's schema and stores the result in BaluHost's database —
+    which nothing ever reads back into the plugin. The failure is silent from
+    the UI's side (a GET returns BaluHost's ``{name, config, schema}`` shape),
+    so this test pins the path rather than the behaviour.
+    """
+    app = FastAPI()
+    plugin = BaluCodePlugin()
+    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
+    paths = {getattr(route, "path", None) for route in app.routes}
+
+    assert "/api/plugins/balu_code/settings" in paths
+    assert "/api/plugins/balu_code/config" not in paths

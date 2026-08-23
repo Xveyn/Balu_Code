@@ -105,14 +105,19 @@ def build_router() -> APIRouter:
             "version": _MANIFEST["version"],
         }
 
-    @router.get("/config", response_model=BaluCodePluginConfig, tags=["balu_code"])
+    # NOT "/config": BaluHost's own plugin router registers /api/plugins/{name}/config
+    # in routes/__init__.py, while plugin routers are mounted later from lifespan.py.
+    # First match wins, so a plugin route on that path is unreachable — requests land
+    # on the core route, which stores config in BaluHost's DB where this plugin never
+    # reads it. Everything below therefore lives under /settings.
+    @router.get("/settings", response_model=BaluCodePluginConfig, tags=["balu_code"])
     async def get_config_route(
         _user: UserPublic = Depends(get_current_user),
         config: BaluCodePluginConfig = Depends(get_plugin_config),
     ) -> BaluCodePluginConfig:
         return config
 
-    @router.put("/config", response_model=BaluCodePluginConfig, tags=["balu_code"])
+    @router.put("/settings", response_model=BaluCodePluginConfig, tags=["balu_code"])
     async def put_config_route(
         body: ConfigUpdateRequest,
         response: Response,
