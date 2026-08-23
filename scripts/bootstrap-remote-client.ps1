@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Bootstrap a Windows client to run opencode locally against a BaluHost remote Ollama.
 
@@ -152,10 +152,13 @@ function ConvertTo-JsonStringFragment([string]$s) {
 $tmpl = Get-Content -Raw -Path $TemplatePath
 # Use .Replace() (literal) rather than -replace (regex) — JSON-escaped values
 # may contain backslashes that would be interpreted as regex escapes.
-$out = $tmpl.Replace('__BASE_URL__', (ConvertTo-JsonStringFragment $fullBase)) `
-            .Replace('__API_KEY__',  (ConvertTo-JsonStringFragment $apiKeyValue)) `
-            .Replace('__MODEL__',    (ConvertTo-JsonStringFragment $Model)) `
-            .Replace('__NUM_CTX__',  ([int]$NumCtx).ToString())
+# Sequential assignments rather than a chained .Replace(): Windows PowerShell
+# 5.1 cannot parse a continued line that starts with a member access, and 5.1
+# is what `powershell.exe` still is on a stock Windows 11.
+$out = $tmpl.Replace('__BASE_URL__', (ConvertTo-JsonStringFragment $fullBase))
+$out = $out.Replace('__API_KEY__',  (ConvertTo-JsonStringFragment $apiKeyValue))
+$out = $out.Replace('__MODEL__',    (ConvertTo-JsonStringFragment $Model))
+$out = $out.Replace('__NUM_CTX__',  ([int]$NumCtx).ToString())
 
 [System.IO.File]::WriteAllText($ConfigFile, $out)
 Write-Host "opencode config written to $ConfigFile"
