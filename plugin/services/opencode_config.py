@@ -7,6 +7,9 @@ opencode-openapi.json, /config GET response). opencode reads its config from
 For v0.2.0 we map only the fields Sven actually uses:
 - BaluCodePluginConfig.ollama_base_url → provider.ollama.options.baseURL
 - BaluCodePluginConfig.chat_model → model (formatted "ollama/<id>")
+- BaluCodePluginConfig.context_window → model options num_ctx
+- BaluCodePluginConfig.temperature → model options temperature
+- BaluCodePluginConfig.think → providerOptions.ollama.think
 - file_write_allowed=False → permission.{edit, bash} = "deny"
 
 Other opencode config keys (lsp, formatter, agents, mcp, …) are intentionally
@@ -47,7 +50,21 @@ def to_opencode_config(
     # opencode flattens our model.options into providerOptions["ollama"], so we
     # need a nested "options" key — otherwise num_ctx is silently dropped and
     # Ollama applies its 4096-token default, truncating opencode's system prompt.
-    model_options = {"options": {"num_ctx": cfg.context_window}}
+    # `think` sits one level higher than the sampling options: it is a field of
+    # ollamaProviderOptions itself, not of the nested Ollama `options` object.
+    # Only emitted when the operator actually chose a value — for a model
+    # without the thinking capability, carrying the field at all can get the
+    # request rejected. Leaving it out is not neutral either (Ollama then
+    # enables thinking on capable models), which is why config.think is
+    # three-valued rather than a plain bool.
+    model_options: dict = {
+        "options": {
+            "num_ctx": cfg.context_window,
+            "temperature": cfg.temperature,
+        },
+    }
+    if cfg.think is not None:
+        model_options["think"] = cfg.think
 
     out: dict = {
         "model": f"ollama/{cfg.chat_model}",
