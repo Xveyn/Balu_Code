@@ -4,9 +4,9 @@
 #
 # Builds the .bhplugin from the working tree, swaps it into
 # <install-root>/<plugin-name>, restarts the backend and then verifies that the
-# plugin actually came back. If it did not, the previous directory is restored
-# and the backend restarted again — a failed deploy leaves a running plugin
-# rather than a broken one.
+# plugin actually came back. If anything goes wrong after the swap, the previous
+# directory is restored and the service started again — a failed deploy never
+# leaves the backend stopped.
 #
 # There is no upload route in BaluHost for local plugins: installing means
 # placing the directory under backend/app/plugins/installed/ and restarting.
@@ -21,14 +21,16 @@
 #   scripts/deploy-local.sh --artefact x.bhplugin    # install a prebuilt archive
 #   scripts/deploy-local.sh --no-restart             # swap files only
 #
-# Every default can be overridden by flag or environment variable:
+# The file owner defaults to the User=/Group= of the systemd unit, so it follows
+# whatever the install actually uses. Every other default can be overridden by
+# flag or environment variable:
 #   INSTALL_ROOT, SERVICE, OWNER, BACKEND_URL, KEEP_BACKUPS, HEALTH_TIMEOUT
 #
 set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/baluhost/backend/app/plugins/installed}"
 SERVICE="${SERVICE:-baluhost-backend}"
-OWNER="${OWNER:-baluhost:baluhost}"
+OWNER="${OWNER:-}"          # empty = derive from the systemd unit
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000}"
 KEEP_BACKUPS="${KEEP_BACKUPS:-3}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
@@ -56,8 +58,15 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# --------------------------------------------------------------------------
+# Preflight — everything that can be checked before the service is touched is
+# checked here. A deploy that is going to fail should fail while the old plugin
+# is still serving.
+# --------------------------------------------------------------------------
+
 [ -f plugin/plugin.json ] || die "run this from the repository root (no plugin/plugin.json here)"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
+command -v curl >/dev/null 2>&1 || die "curl is required"
 [ -d "$INSTALL_ROOT" ] || die "install root does not exist: $INSTALL_ROOT"
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -65,6 +74,27 @@ if [ "$(id -u)" -eq 0 ]; then
 else
     command -v sudo >/dev/null 2>&1 || die "not running as root and sudo is not available"
     SUDO="sudo"
+fi
+
+systemctl cat "$SERVICE" >/dev/null 2>&1 || die "systemd unit not found: ${SERVICE} (pass --service)"
+
+# Ownership follows the unit rather than a guess: BaluHost's own service
+# template carries User= as a placeholder, so installs differ from box to box.
+if [ -z "$OWNER" ]; then
+    owner_user=$(systemctl show "$SERVICE" -p User --value 2>/dev/null || true)
+    owner_group=$(systemctl show "$SERVICE" -p Group --value 2>/dev/null || true)
+    [ -n "$owner_user" ] || owner_user="root"   # no User= in the unit means root
+    [ -n "$owner_group" ] || owner_group="$owner_user"
+    OWNER="${owner_user}:${owner_group}"
+    say "owner from ${SERVICE}: ${OWNER}"
+else
+    owner_user="${OWNER%%:*}"
+    owner_group="${OWNER#*:}"
+fi
+
+id -u "$owner_user" >/dev/null 2>&1 || die "user '${owner_user}' does not exist — pass --owner user:group"
+if command -v getent >/dev/null 2>&1; then
+    getent group "$owner_group" >/dev/null 2>&1 || die "group '${owner_group}' does not exist — pass --owner user:group"
 fi
 
 NAME=$(python3 -c 'import json; print(json.load(open("plugin/plugin.json"))["name"])')
@@ -89,6 +119,9 @@ fi
 # before the installed plugin has been touched.
 STAGE=$(mktemp -d)
 BACKUP=""
+SERVICE_STOPPED=0
+SWAPPED=0
+
 cleanup() {
     if [ -n "${STAGE:-}" ] && [ -d "$STAGE" ]; then
         rm -rf "$STAGE"
@@ -101,22 +134,49 @@ say "unpacking ${ARTEFACT}"
 python3 -m zipfile -e "$ARTEFACT" "$STAGE"
 [ -f "$STAGE/plugin.json" ] || die "archive has no plugin.json at its root: ${ARTEFACT}"
 
-rollback() {
-    if [ -z "$BACKUP" ]; then
-        die "deploy failed and there was no previous install to restore — check: journalctl -u ${SERVICE} -n 50"
+# --------------------------------------------------------------------------
+# Failure handling — from here on the service may be stopped and the target
+# directory may be half-replaced, so every exit path has to put both back.
+# --------------------------------------------------------------------------
+
+restore_previous() {
+    if [ "$SWAPPED" -eq 1 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP" ]; then
+        say "restoring $(basename "$BACKUP")"
+        $SUDO rm -rf "$TARGET"
+        $SUDO cp -a "$BACKUP" "$TARGET"
     fi
-    say "rolling back to $(basename "$BACKUP")"
-    $SUDO rm -rf "$TARGET"
-    $SUDO cp -a "$BACKUP" "$TARGET"
-    if [ "$RESTART" -eq 1 ]; then
-        $SUDO systemctl restart "$SERVICE"
-    fi
-    die "deploy failed and was rolled back — check: journalctl -u ${SERVICE} -n 50"
 }
+
+ensure_service_running() {
+    if [ "$RESTART" -eq 0 ]; then
+        return 0
+    fi
+    say "starting ${SERVICE}"
+    if $SUDO systemctl start "$SERVICE"; then
+        SERVICE_STOPPED=0
+    else
+        say "could not start ${SERVICE} — check: journalctl -u ${SERVICE} -n 50"
+    fi
+}
+
+on_failure() {
+    trap - ERR
+    say "deploy failed — undoing"
+    restore_previous
+    if [ "$SERVICE_STOPPED" -eq 1 ]; then
+        ensure_service_running
+    elif [ "$SWAPPED" -eq 1 ] && [ "$RESTART" -eq 1 ]; then
+        say "restarting ${SERVICE} with the previous version"
+        $SUDO systemctl restart "$SERVICE" || say "could not restart ${SERVICE}"
+    fi
+    die "rolled back — check: journalctl -u ${SERVICE} -n 50"
+}
+trap on_failure ERR
 
 if [ "$RESTART" -eq 1 ]; then
     say "stopping ${SERVICE}"
     $SUDO systemctl stop "$SERVICE"
+    SERVICE_STOPPED=1
 fi
 
 if [ -d "$TARGET" ]; then
@@ -129,11 +189,11 @@ say "installing into ${TARGET}"
 $SUDO rm -rf "$TARGET"
 $SUDO mv "$STAGE" "$TARGET"
 STAGE=""  # moved into place; nothing left to clean up
+SWAPPED=1
 $SUDO chown -R "$OWNER" "$TARGET"
 
 if [ "$RESTART" -eq 1 ]; then
-    say "starting ${SERVICE}"
-    $SUDO systemctl start "$SERVICE"
+    ensure_service_running
 
     # 200 = the plugin's own router answered, so the plugin loaded.
     # 401/403 = the request fell through to the sandbox catch-all, which means
@@ -148,17 +208,19 @@ if [ "$RESTART" -eq 1 ]; then
             200) break ;;
             401|403)
                 say "backend is up but the plugin router is not mounted (HTTP ${code})"
-                rollback
+                false  # hand over to the ERR trap
                 ;;
         esac
         sleep 2
     done
     if [ "$code" != "200" ]; then
         say "health check did not pass within ${HEALTH_TIMEOUT}s (last response: ${code:-none})"
-        rollback
+        false  # hand over to the ERR trap
     fi
     say "healthy: $(curl -s "${BACKEND_URL}/api/plugins/${NAME}/health")"
 fi
+
+trap - ERR
 
 if [ "$KEEP_BACKUPS" -gt 0 ]; then
     ls -1dt "${TARGET}.bak-"* 2>/dev/null | tail -n "+$((KEEP_BACKUPS + 1))" | while read -r old; do
