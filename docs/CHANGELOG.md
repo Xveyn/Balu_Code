@@ -6,7 +6,10 @@
 - `scripts/deploy-local.sh` — build and install this checkout into a local
   BaluHost: backup, swap, restart, health check, and an automatic rollback
   when the plugin does not come back. Covers the gap that BaluHost has no
-  upload route for local plugins.
+  upload route for local plugins. File ownership is derived from the systemd
+  unit and validated before anything is stopped; any failure after the swap
+  restores the previous directory and restarts the service, so a failed deploy
+  never leaves the backend down.
 - `think` config field: turns the reasoning trace of thinking-capable models
   (`qwen3.8` and friends) on or off, forwarded to opencode as
   `providerOptions.ollama.think`. Three-valued — unset omits the flag entirely,

@@ -111,10 +111,18 @@ touched; only the code directory is replaced. A production deploy does not
 disturb the plugin either: `ci-deploy` runs `git reset --hard` without
 `git clean`, and the plugin directory is untracked there.
 
-Defaults assume a standard install and can be overridden:
+File ownership is read from the unit's `User=`/`Group=` rather than assumed —
+BaluHost's own service template carries the user as a placeholder, so it differs
+per install (on the reference box the backend runs as `sven`, not `baluhost`).
+The owner is validated *before* the service is stopped, so an unknown user aborts
+the deploy while the old plugin is still serving.
+
+Other defaults can be overridden:
 
 ```bash
-scripts/deploy-local.sh --install-root /srv/baluhost/backend/app/plugins/installed                         --service baluhost-backend --owner baluhost:baluhost
+scripts/deploy-local.sh --install-root /srv/baluhost/backend/app/plugins/installed
+scripts/deploy-local.sh --service baluhost-backend-local           # different unit
+scripts/deploy-local.sh --owner someuser:somegroup                 # override detection
 scripts/deploy-local.sh --artefact dist/balu_code-0.2.1.bhplugin   # skip the build
 scripts/deploy-local.sh --no-restart                               # swap files only
 ```
