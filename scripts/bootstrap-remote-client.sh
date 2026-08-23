@@ -8,6 +8,10 @@
 #      ~/.config/balu-code/api_key (mode 0600).
 #   4. Prints the export line the user needs in their shell rc.
 #
+# --think off|on writes providerOptions.ollama.think. Leave it out for models
+# without a thinking mode; pass "off" for qwen3.8 and friends, whose default
+# trace is long.
+#
 # Re-running on an already-bootstrapped host:
 #   - re-verifies the binary,
 #   - re-renders the config (picks up new server URL / model),
@@ -31,11 +35,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE_PATH="${REPO_ROOT}/docs/remote-client/opencode.json.tmpl"
 
 NEW_KEY=0
-for arg in "$@"; do
-    case "$arg" in
+# unset | off | on — three-valued on purpose, see the injection below.
+THINK="${THINK:-unset}"
+while [ $# -gt 0 ]; do
+    case "$1" in
         --new-key) NEW_KEY=1 ;;
+        --think)
+            shift
+            THINK="${1:-}"
+            case "$THINK" in
+                off|on) ;;
+                *) echo "--think takes 'off' or 'on'" >&2; exit 2 ;;
+            esac
+            ;;
         -h|--help)
-            echo "Usage: $(basename "$0") [--new-key]"
+            echo "Usage: $(basename "$0") [--new-key] [--think off|on]"
             echo "Env: BASE_URL, MODEL, NUM_CTX (defaults shown when prompted)"
             exit 0
             ;;
@@ -115,9 +129,9 @@ full_base="${base_url%/}/api/plugins/balu_code/ollama/api"
 
 # Use python rather than sed to keep escaping sane (api keys contain '/' and '+').
 python3 - "${TEMPLATE_PATH}" "${CONFIG_FILE}" \
-    "${full_base}" "${api_key_value}" "${model}" "${num_ctx}" <<'PY'
+    "${full_base}" "${api_key_value}" "${model}" "${num_ctx}" "${THINK}" <<'PY'
 import sys, json, pathlib
-tmpl_path, out_path, base_url, api_key, model, num_ctx = sys.argv[1:]
+tmpl_path, out_path, base_url, api_key, model, num_ctx, think = sys.argv[1:]
 tmpl = pathlib.Path(tmpl_path).read_text()
 # JSON-escape (without surrounding quotes) so '"', '\', or control chars
 # in any substituted value can't produce invalid JSON.
@@ -129,6 +143,18 @@ out = (tmpl
        .replace("__API_KEY__", api_key)
        .replace("__MODEL__", model)
        .replace("__NUM_CTX__", str(int(num_ctx))))
+
+if think in ("off", "on"):
+    # providerOptions.ollama.think sits one level above the nested Ollama
+    # options. Written only when asked for: Ollama reads a missing key as
+    # "thinking on" for a capable model, but a model *without* the capability
+    # can reject a request that carries the field at all. Mirrors the
+    # three-valued plugin setting in plugin/config.py.
+    cfg = json.loads(out)
+    cfg["provider"]["ollama"]["models"][model]["options"]["think"] = think == "on"
+    out = json.dumps(cfg, indent=2) + "
+"
+
 pathlib.Path(out_path).write_text(out)
 PY
 chmod 0600 "${CONFIG_FILE}"

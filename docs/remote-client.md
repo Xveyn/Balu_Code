@@ -6,16 +6,36 @@ Run opencode locally on your laptop while the LLM stays on the BaluHost GPU serv
 
 - BaluHost ≥ 1.29 reachable from the client (the URL you use in a browser).
 - BaluHost user account.
-- Linux x86_64 client. (macOS / Windows: the same template works, swap the
-  download URL and checksum to the matching opencode release asset.)
+- Linux x86_64 or Windows x64 client — each has its own bootstrap script.
+  (macOS: the same template works, swap the download URL and checksum to the
+  matching opencode release asset.)
 
 ## One-shot install (recommended)
 
 ```bash
 git clone https://github.com/Xveyn/Balu_Code.git
 cd Balu_Code
-./scripts/bootstrap-remote-client.sh
+./scripts/bootstrap-remote-client.sh --think off
 ```
+
+On Windows, in PowerShell:
+
+```powershell
+git clone https://github.com/Xveyn/Balu_Code.git
+cd Balu_Code
+.\scripts\bootstrap-remote-client.ps1 -BaseUrl https://baluhost.example `
+    -Model qwen3.8-code:latest -NumCtx 32768 -Think off
+```
+
+`--think` / `-Think` writes `providerOptions.ollama.think`. Leave it out for a
+model without a thinking mode — Ollama can reject a request that carries the
+field at all. Pass `off` for qwen3.8 and friends: their default trace is long,
+and on the reference box the same coding task cost 2493 output tokens / 65.8 s
+with it against 1096 / 27.7 s without.
+
+Both scripts write to `$XDG_CONFIG_HOME/opencode/opencode.json`, falling back
+to `~/.config/opencode/opencode.json` — including on Windows, where opencode
+reads that path and not `%APPDATA%`.
 
 The script asks for:
 - your BaluHost base URL (e.g. `https://baluhost.example`),

@@ -5,7 +5,7 @@
 .DESCRIPTION
     Idempotent Windows equivalent of scripts/bootstrap-remote-client.sh.
     1. Downloads pinned opencode.exe to %LOCALAPPDATA%\balu-code-client, verifies SHA-256.
-    2. Writes %APPDATA%\opencode\opencode.json from the in-repo template.
+    2. Writes <XDG_CONFIG_HOME|~\.config>\opencode\opencode.json from the in-repo template.
     3. Prompts once for the BaluHost API key, saves it to %APPDATA%\balu-code\api_key.
     4. Prints the PATH snippet (per-session and permanent) the user needs.
 
@@ -24,6 +24,11 @@
 .PARAMETER NumCtx
     Context window size (e.g. 32768). Skips prompt when provided.
 
+.PARAMETER Think
+    "off" or "on" — writes providerOptions.ollama.think. Omit for models
+    without a thinking mode; pass "off" for qwen3.8 and friends, whose
+    default trace is long.
+
 .EXAMPLE
     .\scripts\bootstrap-remote-client.ps1 `
         -BaseUrl https://baluhost.duckdns.org `
@@ -35,7 +40,9 @@ param(
     [switch]$NewKey,
     [string]$BaseUrl,
     [string]$Model,
-    [string]$NumCtx
+    [string]$NumCtx,
+    [ValidateSet('unset', 'off', 'on')]
+    [string]$Think = 'unset'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,7 +54,11 @@ $OpencodeUrl     = "https://github.com/sst/opencode/releases/download/v$Opencode
 
 $InstallDir = Join-Path $env:LOCALAPPDATA 'balu-code-client'
 $BinaryPath = Join-Path $InstallDir 'opencode.exe'
-$ConfigDir  = Join-Path $env:APPDATA 'opencode'
+# opencode resolves its config from $XDG_CONFIG_HOME (or ~/.config) on Windows
+# too — %APPDATA%\opencode is never read. Verified by renaming the %APPDATA%
+# copy away: the client kept working from ~/.config.
+$XdgConfigHome = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config' }
+$ConfigDir  = Join-Path $XdgConfigHome 'opencode'
 $ConfigFile = Join-Path $ConfigDir 'opencode.json'
 $KeyDir     = Join-Path $env:APPDATA 'balu-code'
 $KeyFile    = Join-Path $KeyDir 'api_key'
@@ -159,6 +170,17 @@ $out = $tmpl.Replace('__BASE_URL__', (ConvertTo-JsonStringFragment $fullBase))
 $out = $out.Replace('__API_KEY__',  (ConvertTo-JsonStringFragment $apiKeyValue))
 $out = $out.Replace('__MODEL__',    (ConvertTo-JsonStringFragment $Model))
 $out = $out.Replace('__NUM_CTX__',  ([int]$NumCtx).ToString())
+
+if ($Think -ne 'unset') {
+    # providerOptions.ollama.think sits one level above the nested Ollama
+    # options. Written only when asked for: Ollama reads a missing key as
+    # "thinking on" for a capable model, but a model *without* the capability
+    # can reject a request that carries the field at all.
+    $cfg = $out | ConvertFrom-Json
+    $cfg.provider.ollama.models.$Model.options |
+        Add-Member -NotePropertyName think -NotePropertyValue ($Think -eq 'on') -Force
+    $out = $cfg | ConvertTo-Json -Depth 12
+}
 
 [System.IO.File]::WriteAllText($ConfigFile, $out)
 Write-Host "opencode config written to $ConfigFile"
