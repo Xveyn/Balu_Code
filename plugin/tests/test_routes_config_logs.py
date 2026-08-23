@@ -96,3 +96,44 @@ def test_get_logs_rejects_excessive_limit(tmp_path):
     client = TestClient(_make_app(tmp_path))
     r = client.get("/api/plugins/balu_code/logs?limit=501")
     assert r.status_code == 422
+
+
+def test_put_config_rewrites_opencode_json(tmp_path):
+    """A model change must reach opencode.json, not just plugin_config.json."""
+    import json
+
+    client = TestClient(_make_app(tmp_path))
+    r = client.put(
+        "/api/plugins/balu_code/config",
+        json={"chat_model": "qwen3.8-code:latest", "context_window": 32768},
+    )
+    assert r.status_code == 200
+
+    payload = json.loads((tmp_path / "opencode.json").read_text())
+    assert payload["model"] == "ollama/qwen3.8-code:latest"
+    model_opts = payload["provider"]["ollama"]["models"]["qwen3.8-code:latest"]["options"]
+    assert model_opts["options"]["num_ctx"] == 32768
+
+
+def test_put_config_reports_when_runtime_was_not_restarted(tmp_path):
+    """No runtime in this process -> header says so instead of implying success."""
+    client = TestClient(_make_app(tmp_path))
+    r = client.put("/api/plugins/balu_code/config", json={"chat_model": "x:1b"})
+    assert r.status_code == 200
+    assert r.headers["X-Balu-Code-Runtime-Restarted"] == "false"
+
+
+def test_put_config_think_toggle_reaches_opencode_json(tmp_path):
+    import json
+
+    client = TestClient(_make_app(tmp_path))
+    r = client.put(
+        "/api/plugins/balu_code/config",
+        json={"chat_model": "qwen3.8-code:latest", "think": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["think"] is False
+
+    payload = json.loads((tmp_path / "opencode.json").read_text())
+    model_opts = payload["provider"]["ollama"]["models"]["qwen3.8-code:latest"]["options"]
+    assert model_opts["think"] is False

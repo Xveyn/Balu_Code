@@ -42,6 +42,7 @@ class ConfigUpdateRequest(BaseModel):
     max_total_tokens_per_turn: int | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     poll_interval_seconds: int | None = Field(default=None, ge=3, le=300)
+    think: bool | None = None
 
 
 class LogEntry(BaseModel):

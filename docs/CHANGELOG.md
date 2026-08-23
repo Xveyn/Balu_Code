@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `think` config field: turns the reasoning trace of thinking-capable models
+  (`qwen3.8` and friends) on or off, forwarded to opencode as
+  `providerOptions.ollama.think`. Three-valued — unset omits the flag entirely,
+  because a model without the capability can reject a request that carries it.
+  On the reference box the same coding task cost 2493 output tokens / 65.8 s
+  with the trace and 1096 / 27.7 s without.
+- `docs/install.md`: qwen3.8:27b setup for a 20 GB card — Ollama env
+  (`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE=q8_0`), Modelfile for the
+  sampling parameters, and how to verify the model actually fits.
+
+### Fixed
+- A config change made through `PUT /config` (or the web UI Config tab) now
+  reaches the agent. `opencode.json` used to be written only during
+  `on_startup()`, so a newly selected model was missing from
+  `provider.ollama.models` and opencode kept answering with the old one — or
+  lost its `num_ctx` and silently truncated its own system prompt against
+  Ollama's 4096-token default. The route now rewrites the file and restarts the
+  runtime, and reports via the `X-Balu-Code-Runtime-Restarted` response header
+  when it could not (worker only attached to a sibling's process → restart the
+  backend).
+- `temperature` from the plugin config is now actually sent to Ollama. It was
+  stored, validated and then dropped in the opencode config mapping.
+
+### Ops
+- Minimum Ollama version raised to 0.32.12 in the docs (was 0.3.x, which
+  predates every model this plugin now recommends).
+
 ## 0.2.1 — 2026-05-15
 
 ### Added

@@ -30,6 +30,20 @@ class BaluCodePluginConfig(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     poll_interval_seconds: int = Field(default=10, ge=3, le=300)
 
+    # Reasoning-trace control for thinking-capable models (qwen3.8 and friends),
+    # forwarded to opencode as providerOptions.ollama.think. Three-valued on
+    # purpose, because both extremes are traps:
+    #   None  -> key omitted. Ollama then enables thinking for every model that
+    #            advertises the capability, i.e. qwen3.8 runs its longest trace.
+    #   False -> trace off. Measured on the reference box (RX 7900 XT,
+    #            qwen3.8:27b q4_K_M): the same coding task cost 2493 output
+    #            tokens / 65.8s with the trace and 1096 / 27.7s without.
+    #   True  -> trace on, explicitly.
+    # Not defaulted to False: models without the thinking capability can reject
+    # a request that carries the field at all, and the default chat_model is one
+    # of them. Set it per install once a thinking-capable model is selected.
+    think: bool | None = None
+
     # Phase A opencode integration
     opencode_port: int = Field(default=4096, ge=0, le=65535)
 

@@ -62,3 +62,36 @@ def test_write_opencode_config_creates_parent(tmp_path):
     nested = tmp_path / "sub" / "dir"
     path = write_opencode_config(nested, cfg, file_write_allowed=True)
     assert path.exists()
+
+
+def test_think_key_is_absent_while_unset():
+    """A model without the thinking capability may reject a request that
+    carries the field at all, so an unset value must not emit the key."""
+    cfg = BaluCodePluginConfig(chat_model="qwen2.5-coder:14b")
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    model_opts = result["provider"]["ollama"]["models"]["qwen2.5-coder:14b"]["options"]
+    assert "think" not in model_opts
+
+
+def test_think_false_is_forwarded_explicitly():
+    """Ollama reads a missing key as "thinking on" for capable models, so
+    switching the trace off has to be written out."""
+    cfg = BaluCodePluginConfig(chat_model="qwen3.8:27b", think=False)
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    model_opts = result["provider"]["ollama"]["models"]["qwen3.8:27b"]["options"]
+    assert model_opts["think"] is False
+
+
+def test_think_true_is_forwarded():
+    cfg = BaluCodePluginConfig(chat_model="qwen3.8:27b", think=True)
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    model_opts = result["provider"]["ollama"]["models"]["qwen3.8:27b"]["options"]
+    assert model_opts["think"] is True
+
+
+def test_temperature_reaches_ollama_options():
+    """`temperature` used to be stored in the plugin config and dropped here."""
+    cfg = BaluCodePluginConfig(chat_model="x:1b", temperature=0.7)
+    result = to_opencode_config(cfg, file_write_allowed=True)
+    model_opts = result["provider"]["ollama"]["models"]["x:1b"]["options"]
+    assert model_opts["options"]["temperature"] == 0.7
