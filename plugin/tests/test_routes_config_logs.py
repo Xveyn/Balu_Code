@@ -151,10 +151,8 @@ def test_plugin_never_registers_a_config_route():
     the UI's side (a GET returns BaluHost's ``{name, config, schema}`` shape),
     so this test pins the path rather than the behaviour.
     """
-    app = FastAPI()
-    plugin = BaluCodePlugin()
-    app.include_router(plugin.get_router(), prefix="/api/plugins/balu_code")
-    paths = {getattr(route, "path", None) for route in app.routes}
+    router = BaluCodePlugin().get_router()
+    paths = {getattr(route, "path", "") for route in router.routes}
 
-    assert "/api/plugins/balu_code/settings" in paths
-    assert "/api/plugins/balu_code/config" not in paths
+    assert "/settings" in paths, f"routes: {sorted(paths)}"
+    assert "/config" not in paths, f"routes: {sorted(paths)}"
