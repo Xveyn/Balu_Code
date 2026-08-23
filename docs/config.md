@@ -3,14 +3,21 @@
 Three configuration layers, applied in order (later overrides earlier):
 
 1. **Server defaults** — `BaluCodePluginConfig` defaults in `plugin/config.py`
-2. **Persisted server config** — edited via the web UI Config tab or `PUT /config`
+2. **Persisted server config** — edited via the web UI Config tab or `PUT /settings`
 3. **Project-local** — `.balucode.yaml` at the project root
 
 ---
 
 ## Server config (`BaluCodePluginConfig`)
 
-Editable in the web UI under **Balu Code → Config** or via `PUT /api/plugins/balu_code/config`.
+Editable in the web UI under **Balu Code → Config** or via
+`PUT /api/plugins/balu_code/settings`.
+
+> **Why `/settings` and not `/config`:** BaluHost registers its own
+> `/api/plugins/{name}/config` route before plugin routers are mounted, so a
+> plugin route on that path never receives a request — the core route answers
+> instead and stores the value in BaluHost's database, which this plugin never
+> reads. The name avoids the collision.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
