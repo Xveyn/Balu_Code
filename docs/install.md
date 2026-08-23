@@ -86,6 +86,39 @@ cat /sys/class/drm/card*/device/mem_info_vram_used
 2. In the BaluHost web UI, go to **Plugins → Install plugin** and upload the `.bhplugin` file.
 3. BaluHost installs and activates the plugin automatically. The sidebar shows a **Balu Code** entry.
 
+### 2a. Updating an existing install
+
+BaluHost has no upload route for local plugins — installing means placing the
+directory under `backend/app/plugins/installed/` and restarting the backend.
+`scripts/deploy-local.sh` does that from a checkout **on the BaluHost machine**:
+
+```bash
+git clone https://github.com/Xveyn/Balu_Code.git
+cd Balu_Code
+scripts/deploy-local.sh
+```
+
+It builds the artefact, keeps the current install as a timestamped `.bak-`
+directory, swaps in the new one, restarts `baluhost-backend`, and then checks
+`GET /api/plugins/balu_code/health`. A 200 means the plugin's own router
+answered; a 401 means the request fell through to BaluHost's sandbox catch-all,
+i.e. the plugin failed to load — in that case the previous directory is restored
+and the backend restarted again, so a failed update leaves a working plugin.
+
+Plugin *data* (projects DB, `opencode.json`, the opencode binary, the runtime
+password) lives in the service user's `~/.local/share/balu-code` and is never
+touched; only the code directory is replaced. A production deploy does not
+disturb the plugin either: `ci-deploy` runs `git reset --hard` without
+`git clean`, and the plugin directory is untracked there.
+
+Defaults assume a standard install and can be overridden:
+
+```bash
+scripts/deploy-local.sh --install-root /srv/baluhost/backend/app/plugins/installed                         --service baluhost-backend --owner baluhost:baluhost
+scripts/deploy-local.sh --artefact dist/balu_code-0.2.1.bhplugin   # skip the build
+scripts/deploy-local.sh --no-restart                               # swap files only
+```
+
 ## 3. Smoke test
 
 Replace `<host>` and `<key>` with your BaluHost hostname and an API key:

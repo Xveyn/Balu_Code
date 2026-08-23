@@ -7,7 +7,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from scripts.build_bhplugin import build_bhplugin
+from scripts.build_bhplugin import _should_include, build_bhplugin
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,6 +46,14 @@ def test_build_excludes_tests_and_dev_pyproject(tmp_path):
     assert not any(n.startswith("tests/") for n in names)
     assert "pyproject.toml" not in names
     assert not any(n.endswith("__pycache__/") for n in names)
+
+
+def test_editable_install_metadata_is_not_shipped():
+    """A dev machine that ran `pip install -e plugin` has a *.egg-info tree
+    sitting in plugin/. Filter it out rather than shipping build junk."""
+    assert not _should_include(Path("balu_code_plugin_dev.egg-info/PKG-INFO"))
+    assert not _should_include(Path("services/some.egg-info/SOURCES.txt"))
+    assert _should_include(Path("services/opencode_config.py"))
 
 
 def test_build_emits_sha256_sidecar(tmp_path):

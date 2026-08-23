@@ -28,6 +28,11 @@ def _should_include(relpath: Path) -> bool:
         return False
     if any(p == "__pycache__" for p in parts):
         return False
+    # `pip install -e plugin` leaves a *.egg-info tree next to the sources.
+    # It is not part of the plugin and must not be shipped, whether or not
+    # the machine doing the build happens to be clean.
+    if any(p.endswith(".egg-info") for p in parts[:-1]):
+        return False
     return relpath.suffix not in _EXCLUDE_SUFFIXES
 
 
