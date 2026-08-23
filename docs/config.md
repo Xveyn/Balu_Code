@@ -15,7 +15,7 @@ Editable in the web UI under **Balu Code → Config** or via `PUT /api/plugins/b
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `ollama_base_url` | string | `http://127.0.0.1:11434` | Ollama API base URL |
-| `chat_model` | string | `qwen2.5-coder:14b-instruct-q4_K_M` | Model used for agent turns |
+| `chat_model` | string | `qwen2.5-coder:14b` | Model used for agent turns |
 | `embed_model` | string | `nomic-embed-text` | Model used for RAG embeddings |
 | `context_window` | int | `32768` | Token context window sent to Ollama |
 | `repo_map_budget` | int | `6144` | Max tokens reserved for the repo map |
@@ -24,6 +24,15 @@ Editable in the web UI under **Balu Code → Config** or via `PUT /api/plugins/b
 | `max_iterations` | int | `12` | Max agent loop iterations per turn |
 | `max_total_tokens_per_turn` | int | `80000` | Hard token cap across all iterations |
 | `temperature` | float | `0.2` | Sampling temperature (0.0–2.0) |
+| `think` | bool \| null | `null` | Reasoning trace for thinking-capable models. `null` omits the flag, which Ollama reads as *trace on* for any capable model; `false` switches it off; `true` forces it on. Left unset by default because a model without the capability can reject a request that carries the field at all |
+| `opencode_port` | int | `4096` | Port the embedded opencode server listens on |
+
+Changing `chat_model`, `context_window`, `temperature` or `think` rewrites `opencode.json`
+and restarts the embedded opencode runtime, because opencode reads that file only at
+startup. The response header `X-Balu-Code-Runtime-Restarted` reports whether that happened:
+`false` means the config was persisted but the running server was left alone — the worker
+handling the request was only *attached* to a runtime owned by a sibling Uvicorn worker.
+Restart the BaluHost backend in that case.
 
 ---
 

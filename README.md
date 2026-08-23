@@ -34,11 +34,15 @@ Balu_Code wraps a vendored [opencode](https://github.com/sst/opencode) binary as
 | Component | Version |
 |-----------|---------|
 | BaluHost | ≥ 1.29.0 |
-| Ollama | 0.3.x (on `127.0.0.1:11434`) |
+| Ollama | ≥ 0.32.12 (on `127.0.0.1:11434`) |
 | GPU VRAM | Depends on opencode config + selected LLM model |
 | GPU driver | ROCm ≥ 6.1 or CUDA ≥ 12.1 |
 
 **Reference hardware:** AMD RX 7900 XT (20 GB GDDR6, ROCm 6.2).
+
+`qwen3.8:27b` runs on that card at a 32K context (17 GB resident, `100% GPU`) with a
+quantised KV cache — setup and measured numbers in [`docs/install.md`](docs/install.md).
+Ollama 0.32.12 is the release that added the model; older builds cannot load it.
 
 **Note:** The opencode binary is self-contained; no separate system Bun or Node.js installation required.
 
@@ -76,7 +80,7 @@ Three layers applied in order (later overrides earlier):
 
 ```yaml
 # .balucode.yaml — all fields optional
-model: qwen2.5-coder:7b
+model: qwen3.8-code:latest
 temperature: 0.3
 auto_approve:
   - read_file
