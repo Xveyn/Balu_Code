@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from .config import BaluCodePluginConfig
 from .deps import (
@@ -63,8 +64,11 @@ from .services.project_store import (
     ProjectStore,
 )
 from .services.repo_map import ProjectRootNotAccessible, RepoMap
+from .services.runtime_manager import apply_config_to_runtime
 from .services.session_bridge import SessionBridge
 from .services.system import get_gpu_info
+
+logger = logging.getLogger(__name__)
 
 _MANIFEST_PATH = Path(__file__).parent / "plugin.json"
 _MANIFEST = json.loads(_MANIFEST_PATH.read_text())
@@ -111,6 +115,7 @@ def build_router() -> APIRouter:
     @router.put("/config", response_model=BaluCodePluginConfig, tags=["balu_code"])
     async def put_config_route(
         body: ConfigUpdateRequest,
+        response: Response,
         _user: UserPublic = Depends(get_current_user),
         config: BaluCodePluginConfig = Depends(get_plugin_config),
         data_dir: Path = Depends(get_data_dir),
@@ -120,6 +125,23 @@ def build_router() -> APIRouter:
         new_config = BaluCodePluginConfig.model_validate(merged)
         await asyncio.to_thread(save_plugin_config, new_config, data_dir)
         update_plugin_config(new_config)
+
+        # Persisting alone is not enough: opencode reads opencode.json at
+        # startup, so a new model/num_ctx/think would otherwise never reach it.
+        try:
+            restarted = await apply_config_to_runtime(data_dir, new_config)
+        except Exception:
+            logger.exception("opencode runtime restart after config change failed")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "config saved, but the opencode runtime did not come back up; "
+                    "restart the BaluHost backend"
+                ),
+            ) from None
+        # "false" = config file rewritten, running server untouched (this worker
+        # only attached to it). The operator has to restart the backend.
+        response.headers["X-Balu-Code-Runtime-Restarted"] = "true" if restarted else "false"
         return new_config
 
     @router.get("/logs", response_model=LogsResponse, tags=["balu_code"])
