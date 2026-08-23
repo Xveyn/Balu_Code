@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Fixed
+- Plugin UI rendered a blank page: the bundle still used the pre-sandbox host
+  contract (`window.React`, `localStorage` token, direct `fetch`) and died on
+  load with "React is undefined". BaluHost runs plugin UIs in an iframe with
+  `sandbox="allow-scripts"` and no `allow-same-origin`, so all three are
+  unavailable — React and hooks now come from `window.BaluHost`, and every
+  request goes through its proxied api (own-plugin routes need no scope).
+- Config tab could not save: it echoed the whole GET /config object back, but
+  `ConfigUpdateRequest` is `extra="forbid"` and has no `opencode_port`, so the
+  PUT was answered with 422. Only editable fields are sent now.
+- Dropped the Index button and the active-turn banner — they called
+  `/index/{id}` and `/turns/current`, removed back in 0.2.0.
+
 ### Added
 - `scripts/deploy-local.sh` — build and install this checkout into a local
   BaluHost: backup, swap, restart, health check, and an automatic rollback

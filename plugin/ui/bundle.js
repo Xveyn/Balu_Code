@@ -1,22 +1,47 @@
 /**
- * Balu Code Plugin UI — single-file React bundle.
- * Uses window.React from the BaluHost host app. No build step.
+ * Balu Code Plugin UI — single-file React bundle. No build step.
+ *
+ * Runs inside BaluHost's plugin sandbox: the iframe is created with
+ * sandbox="allow-scripts" and deliberately WITHOUT allow-same-origin, so the
+ * document has an opaque origin. There is no `window.React` there, reading
+ * `localStorage` throws, and a direct fetch would leave as a cross-origin
+ * request with no credentials — which is why the pre-sandbox version of this
+ * file died on load with "React is undefined".
+ *
+ * The contract is `window.BaluHost`: React, hooks, ui, icons, utils plus a
+ * *proxied* api/toast/storage/navigate. The host performs the HTTP call and
+ * gates it — a plugin's own /api/plugins/balu_code/… routes are always
+ * allowed, anything else needs a granted scope. Only the response body comes
+ * back through that bridge; headers do not.
  */
 
-const React = window.React;
-const { useState, useEffect, useCallback } = React;
+const { React, hooks, api: host } = window.BaluHost;
+const { useState, useEffect, useCallback } = hooks;
 const ce = React.createElement;
 
 const API = '/api/plugins/balu_code';
 
+/**
+ * Keeps the call signature the rest of this file already used, so every tab
+ * stays unchanged; only the transport moved to the host bridge. Bridge
+ * rejections are plain objects ({code, message}), so they are normalised to
+ * Error here — call sites read `.message`.
+ */
 async function api(path, opts = {}) {
-  const token = localStorage.getItem('token');
-  const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json();
+  const url = `${API}${path}`;
+  const method = (opts.method || 'GET').toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : undefined;
+  try {
+    if (method === 'GET') return await host.get(url);
+    if (method === 'POST') return await host.post(url, body);
+    if (method === 'PUT') return await host.put(url, body);
+    if (method === 'PATCH') return await host.patch(url, body);
+    if (method === 'DELETE') return await host.delete(url);
+    throw new Error(`unsupported method ${method}`);
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    throw new Error((err && (err.message || err.code)) || String(err));
+  }
 }
 
 // ── Shared UI atoms ──────────────────────────────────────────────────────────
@@ -99,7 +124,6 @@ function ProjectsTab() {
   const [name, setName] = useState('');
   const [rootPath, setRootPath] = useState('');
   const [creating, setCreating] = useState(false);
-  const [indexing, setIndexing] = useState({});
 
   const load = useCallback(() => {
     api('/projects')
@@ -128,26 +152,6 @@ function ProjectsTab() {
     catch (e) { setError(e.message); }
   }
 
-  async function startIndex(id) {
-    setIndexing(prev => ({ ...prev, [id]: 'running' }));
-    setError(null);
-    try {
-      await api(`/index/${id}`, { method: 'POST' });
-      const poll = setInterval(async () => {
-        const s = await api(`/index/${id}/status`).catch(() => null);
-        if (!s) return;
-        if (s.status === 'done') {
-          setIndexing(prev => ({ ...prev, [id]: 'done' }));
-          clearInterval(poll);
-        } else if (s.status === 'error') {
-          setError(s.error || 'Index failed');
-          setIndexing(prev => ({ ...prev, [id]: 'error' }));
-          clearInterval(poll);
-        }
-      }, 1500);
-    } catch (e) { setError(e.message); setIndexing(prev => ({ ...prev, [id]: 'error' })); }
-  }
-
   if (!projects) return ce(Spinner);
 
   const inputCls = 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500 w-full';
@@ -174,15 +178,6 @@ function ProjectsTab() {
                 ce('div', { className: 'text-xs text-slate-500 truncate' }, p.root_path)
               ),
               ce('div', { className: 'flex gap-2 shrink-0' },
-                ce(Btn, {
-                  onClick: () => startIndex(p.id),
-                  disabled: indexing[p.id] === 'running',
-                  variant: 'ghost',
-                },
-                  indexing[p.id] === 'running' ? 'Indexing…'
-                  : indexing[p.id] === 'done'  ? 'Re-index'
-                  : 'Index'
-                ),
                 ce(Btn, { onClick: () => del(p.id), variant: 'danger' }, 'Delete')
               )
             )
@@ -193,19 +188,32 @@ function ProjectsTab() {
 
 // ── Config tab ────────────────────────────────────────────────────────────────
 
+// Only fields ConfigUpdateRequest accepts may be sent: it is extra="forbid",
+// and GET /config returns more than that (opencode_port), so echoing the whole
+// object back — which this tab used to do — is answered with 422.
 const CONFIG_FIELDS = [
-  { key: 'ollama_base_url',           label: 'Ollama Base URL',             type: 'text' },
-  { key: 'chat_model',                label: 'Chat Model',                  type: 'text' },
-  { key: 'embed_model',               label: 'Embed Model',                 type: 'text' },
-  { key: 'context_window',            label: 'Context Window (tokens)',      type: 'number' },
-  { key: 'repo_map_budget',           label: 'Repo Map Budget (tokens)',     type: 'number' },
-  { key: 'rag_budget',                label: 'RAG Budget (tokens)',          type: 'number' },
-  { key: 'rag_top_k',                 label: 'RAG Top K',                   type: 'number' },
-  { key: 'max_iterations',            label: 'Max Iterations',              type: 'number' },
-  { key: 'max_total_tokens_per_turn', label: 'Max Total Tokens / Turn',     type: 'number' },
-  { key: 'temperature',               label: 'Temperature (0–2)',            type: 'number', step: 0.1 },
-  { key: 'poll_interval_seconds', label: 'System poll interval (s, min 3)', type: 'number' },
+  { key: 'ollama_base_url',           label: 'Ollama Base URL',                 type: 'text' },
+  { key: 'chat_model',                label: 'Chat Model',                      type: 'text' },
+  { key: 'embed_model',               label: 'Embed Model',                     type: 'text' },
+  { key: 'context_window',            label: 'Context Window (tokens)',         type: 'number' },
+  { key: 'repo_map_enabled',          label: 'Repo Map',                        type: 'bool' },
+  { key: 'repo_map_budget',           label: 'Repo Map Budget (tokens)',        type: 'number' },
+  { key: 'rag_budget',                label: 'RAG Budget (tokens)',             type: 'number' },
+  { key: 'rag_top_k',                 label: 'RAG Top K',                       type: 'number' },
+  { key: 'max_iterations',            label: 'Max Iterations',                  type: 'number' },
+  { key: 'max_total_tokens_per_turn', label: 'Max Total Tokens / Turn',         type: 'number' },
+  { key: 'temperature',               label: 'Temperature (0–2)',               type: 'number', step: 0.1 },
+  { key: 'poll_interval_seconds',     label: 'System poll interval (s, min 3)', type: 'number' },
+  { key: 'think',                     label: 'Reasoning trace (think)',         type: 'think' },
 ];
+
+const THINK_UNSET = 'unset';
+
+function thinkToForm(value) {
+  if (value === true) return 'on';
+  if (value === false) return 'off';
+  return THINK_UNSET;
+}
 
 function ConfigTab() {
   const [form, setForm] = useState(null);
@@ -224,17 +232,65 @@ function ConfigTab() {
 
   async function save() {
     setSaving(true); setError(null);
+    const payload = {};
+    for (const f of CONFIG_FIELDS) {
+      // `think` unset cannot be restored: PUT /config drops null fields, so
+      // sending it would be a silent no-op. Skip it instead of pretending.
+      if (f.key === 'think') {
+        if (form.think === true || form.think === false) payload.think = form.think;
+        continue;
+      }
+      payload[f.key] = form[f.key];
+    }
     try {
-      const updated = await api('/config', { method: 'PUT', body: JSON.stringify(form) });
+      const updated = await api('/config', { method: 'PUT', body: JSON.stringify(payload) });
       setForm(updated);
       setSaved(true);
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
   }
 
-  if (!form) return ce(Spinner);
+  if (!form) return error ? ce(ErrorBox, { msg: error }) : ce(Spinner);
 
   const inputCls = 'bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500 w-full';
+
+  function field(f) {
+    if (f.type === 'bool') {
+      return ce('select', {
+        value: form[f.key] ? 'on' : 'off',
+        onChange: e => set(f.key, e.target.value === 'on'),
+        className: inputCls,
+      },
+        ce('option', { value: 'on' }, 'Enabled'),
+        ce('option', { value: 'off' }, 'Disabled')
+      );
+    }
+    if (f.type === 'think') {
+      return ce('div', null,
+        ce('select', {
+          value: thinkToForm(form.think),
+          onChange: e => set('think', e.target.value === 'on' ? true : e.target.value === 'off' ? false : null),
+          className: inputCls,
+        },
+          ce('option', { value: THINK_UNSET, disabled: true }, 'Not set — Ollama decides'),
+          ce('option', { value: 'off' }, 'Off — no reasoning trace'),
+          ce('option', { value: 'on' }, 'On — model emits its reasoning trace')
+        ),
+        ce('p', { className: 'text-xs text-slate-500 mt-1' },
+          thinkToForm(form.think) === THINK_UNSET
+            ? 'Unset means Ollama enables thinking for every capable model — for qwen3.8 that is its longest trace. Once changed, unset cannot be restored from here.'
+            : 'Ollama enables thinking by default for capable models; qwen3.8 measured 2493 output tokens / 65.8s with the trace against 1096 / 27.7s without.'
+        )
+      );
+    }
+    return ce('input', {
+      type: f.type,
+      step: f.step,
+      value: form[f.key] ?? '',
+      onChange: e => set(f.key, f.type === 'number' ? Number(e.target.value) : e.target.value),
+      className: inputCls,
+    });
+  }
 
   return ce('div', { className: 'space-y-6' },
     ce(ErrorBox, { msg: error }),
@@ -244,19 +300,17 @@ function ConfigTab() {
         CONFIG_FIELDS.map(f =>
           ce('div', { key: f.key },
             ce('label', { className: 'block text-sm text-slate-400 mb-1' }, f.label),
-            ce('input', {
-              type: f.type,
-              step: f.step,
-              value: form[f.key] ?? '',
-              onChange: e => set(f.key, f.type === 'number' ? Number(e.target.value) : e.target.value),
-              className: inputCls,
-            })
+            field(f)
           )
         )
       ),
       ce('div', { className: 'flex items-center gap-3 mt-6' },
         ce(Btn, { onClick: save, disabled: saving }, saving ? 'Saving…' : 'Save'),
         saved ? ce('span', { className: 'text-sm text-emerald-400' }, 'Saved!') : null
+      ),
+      ce('p', { className: 'text-xs text-slate-500 mt-3' },
+        'Saving rewrites opencode.json and restarts the embedded runtime. ' +
+        'Check the Runtime tab: a changed pid means the new config is live.'
       )
     )
   );
@@ -416,7 +470,11 @@ function SystemTab() {
       ce(VramBar, {
         usedBytes: loaded.reduce((s, m) => s + (m.size_vram || 0), 0),
         totalBytes: gpu.available ? gpu.vram_total_bytes : null,
-      })
+      }),
+      gpu.available
+        ? null
+        : ce('p', { className: 'text-xs text-slate-500 mt-2' },
+            'Install amd-smi, rocm-smi or nvidia-smi on the server to see total VRAM.')
     ),
 
     ce(Card, null,
@@ -514,7 +572,7 @@ function RuntimeTab() {
       ce('ul', { className: 'text-sm text-slate-400 space-y-1 list-disc list-inside' },
         ce('li', null, 'Plugin embeds an opencode binary as a long-lived subprocess (one server, shared across BaluHost workers).'),
         ce('li', null, 'Chat goes through ', ce('code', { className: 'text-slate-300' }, 'POST /chat/v2/{project_id}'), ' (synchronous JSON). SSE streaming is a v0.3.0 candidate.'),
-        ce('li', null, 'Sessions persist via opencode\'s own storage; mapping to BaluHost projects lives in projects.opencode_session_id.'),
+        ce('li', null, 'Saving in Config rewrites opencode.json and restarts this runtime — the pid above changes when it did.'),
       )
     ),
 
@@ -526,36 +584,6 @@ function RuntimeTab() {
 }
 
 // ── Stats tab ─────────────────────────────────────────────────────────────────
-
-function TurnBanner() {
-  const [turn, setTurn] = useState(null);
-
-  const load = useCallback(() => {
-    api('/turns/current').then(setTurn).catch(() => {});
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-  useInterval(load, 5_000);
-
-  if (!turn) return null;
-  if (!turn.active) {
-    return ce('div', { className: 'text-xs text-slate-500 italic' }, 'No active turn');
-  }
-
-  function pad(n) { return String(n).padStart(2, '0'); }
-  const s = turn.elapsed_seconds || 0;
-  const elapsed = `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
-
-  return ce('div', {
-    className: 'flex items-center gap-3 px-4 py-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sm',
-  },
-    ce('span', { className: 'w-2 h-2 rounded-full bg-sky-400 animate-pulse' }),
-    ce('span', { className: 'text-sky-300 font-medium' }, turn.model),
-    ce('span', { className: 'text-slate-400' }, `${turn.iterations} iteration${turn.iterations !== 1 ? 's' : ''}`),
-    ce('span', { className: 'text-slate-400' }, elapsed),
-    ce('span', { className: 'text-slate-500' }, turn.username)
-  );
-}
 
 const _thCls = 'text-left text-slate-500 text-xs font-medium py-2 pr-4';
 const _tdCls = 'py-2 pr-4 text-sm';
@@ -596,7 +624,6 @@ function StatsTab() {
 
   return ce('div', { className: 'space-y-6' },
     ce(ErrorBox, { msg: error }),
-    ce(TurnBanner),
 
     ce('div', { className: 'flex items-center justify-between' },
       ce('h2', { className: 'text-lg font-semibold text-white' }, 'Usage Stats'),
